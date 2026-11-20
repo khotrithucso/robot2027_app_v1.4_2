@@ -1,0 +1,284 @@
+/* Robot 2027 V1.4 - OLED Black & Dark Neon Theme */
+:root {
+  --bg-oled: #000000;
+  --bg-panel: #05080f;
+  --bg-card: #0c1322;
+  --bg-card-hover: #131e36;
+  --border-neon: rgba(0, 229, 255, 0.28);
+  --border-bright: #00e5ff;
+  --cyan: #00e5ff;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --rose: #f43f5e;
+  --purple: #a855f7;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --safe-left: 44px; /* Tránh đè nút trợ năng nổi bên mép trái Android */
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-oled);
+  color: var(--text-main);
+}
+
+/* Thanh trạng thái góc trên bên trái */
+.top-left-hud {
+  position: fixed;
+  top: 10px;
+  left: var(--safe-left);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+.hud-pill {
+  background: rgba(5, 8, 15, 0.85);
+  border: 1px solid var(--border-neon);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  backdrop-filter: blur(6px);
+}
+
+.hud-pill.star {
+  border-color: rgba(245, 158, 11, 0.55);
+  color: #fde68a;
+}
+
+.hud-pill.ble-on {
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #6ee7b7;
+}
+
+.hud-pill.timer {
+  border-color: rgba(168, 85, 247, 0.7);
+  background: rgba(88, 28, 135, 0.55);
+  color: #f3e8ff;
+}
+
+/* Thanh 6 icon cố định góc trên bên phải */
+.top-right-nav {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(5, 8, 15, 0.9);
+  border: 1px solid var(--border-neon);
+  padding: 5px 8px;
+  border-radius: 999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.nav-icon-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.9);
+  color: #cbd5e1;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-icon-btn:active {
+  transform: scale(0.93);
+}
+
+.nav-icon-btn.active {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--cyan);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.55);
+  transform: scale(1.06);
+}
+
+.nav-icon-btn .lock-badge {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  font-size: 11px;
+  background: #0f172a;
+  border-radius: 50%;
+  padding: 1px;
+  display: none;
+}
+
+.nav-icon-btn.locked .lock-badge {
+  display: block;
+}
+
+/* Quy tắc chuyển trang đơn lớp (Single-Layer View Architecture) */
+.app-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: none;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.app-view.active {
+  display: flex;
+  flex-direction: column;
+}
+
+#view-robot.active {
+  background: var(--bg-oled);
+}
+
+/* Nút chung */
+.btn-neon {
+  background: rgba(0, 229, 255, 0.14);
+  border: 1px solid var(--cyan);
+  color: #e0f2fe;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+
+.btn-neon:active {
+  transform: scale(0.96);
+  background: rgba(0, 229, 255, 0.3);
+}
+
+.btn-neon.green {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: var(--green);
+  color: #d1fae5;
+}
+
+.btn-neon.amber {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: var(--amber);
+  color: #fef3c7;
+}
+
+.btn-neon.rose {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: var(--rose);
+  color: #ffe4e6;
+}
+
+.btn-neon.gray {
+  background: rgba(51, 65, 85, 0.45);
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.btn-neon:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Modal & Dialog chuẩn */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9800;
+  background: rgba(0, 0, 0, 0.82);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal-box {
+  background: var(--bg-card);
+  border: 1.5px solid var(--cyan);
+  border-radius: 16px;
+  padding: 18px 20px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.25);
+}
+
+.modal-box h3 {
+  font-size: 16px;
+  color: var(--cyan);
+  margin-bottom: 8px;
+}
+
+.modal-box p {
+  font-size: 13.5px;
+  color: #cbd5e1;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.pin-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 20px;
+  letter-spacing: 8px;
+  text-align: center;
+  background: #020617;
+  border: 1px solid var(--cyan);
+  border-radius: 10px;
+  color: #ffffff;
+  margin-bottom: 12px;
+  outline: none;
+}
+
+.toast-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--cyan);
+  color: #f8fafc;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7);
+  transition: transform 0.25s ease;
+  pointer-events: none;
+}
+
+.toast-banner.show {
+  transform: translateX(-50%) translateY(0);
+}

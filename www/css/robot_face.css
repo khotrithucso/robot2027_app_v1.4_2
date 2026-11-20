@@ -1,0 +1,341 @@
+/* Robot 2027 V1.4 - Khuôn Mặt OLED & Bảng Học Karaoke */
+.robot-stage {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 54px 20px 14px var(--safe-left);
+  position: relative;
+}
+
+/* Vùng khuôn mặt (Mắt - Mũi - Miệng) */
+.face-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  flex: 1;
+}
+
+/* Khi mở chế độ Học Karaoke: Mắt thu gọn lên nửa trên, Miệng ẩn nhường chỗ cho chữ */
+.robot-stage.lesson-active .face-container {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  transform: scale(0.76);
+}
+
+.eyes-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 56px;
+}
+
+.r-eye {
+  width: 92px;
+  height: 118px;
+  border-radius: 46px;
+  background: radial-gradient(circle at 38% 32%, #a5f3fc 0%, #00e5ff 58%, #0284c7 100%);
+  box-shadow: 0 0 34px rgba(0, 229, 255, 0.72), inset 0 0 14px rgba(255, 255, 255, 0.85);
+  position: relative;
+  transition: all 0.22s ease;
+}
+
+.r-eye::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.r-eye::after {
+  content: '';
+  position: absolute;
+  top: 44px;
+  left: 38px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+/* Các trạng thái biểu cảm của mắt */
+.r-eye.blink {
+  height: 8px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+}
+.r-eye.blink::before, .r-eye.blink::after { opacity: 0; }
+
+.r-eye.listening {
+  transform: scale(1.1);
+  background: radial-gradient(circle at 38% 32%, #a7f3d0 0%, #10b981 65%, #047857 100%);
+  box-shadow: 0 0 42px rgba(16, 185, 129, 0.9);
+}
+
+.r-eye.thinking {
+  background: radial-gradient(circle at 38% 32%, #fde68a 0%, #f59e0b 65%, #b45309 100%);
+  box-shadow: 0 0 38px rgba(245, 158, 11, 0.85);
+  transform: translateY(-6px) scale(0.95);
+}
+
+.r-eye.happy {
+  height: 62px;
+  border-radius: 62px 62px 14px 14px;
+  background: radial-gradient(circle at 50% 35%, #bbf7d0 0%, #22c55e 65%, #15803d 100%);
+  box-shadow: 0 0 36px rgba(34, 197, 94, 0.85);
+}
+
+.r-eye.encourage {
+  background: radial-gradient(circle at 38% 32%, #fbcfe8 0%, #f472b6 65%, #db2777 100%);
+  box-shadow: 0 0 36px rgba(244, 114, 182, 0.85);
+}
+
+.r-eye.dizzy {
+  background: radial-gradient(circle at 50% 50%, #fef08a 0%, #eab308 70%);
+  transform: rotate(15deg) scale(0.92);
+}
+
+.r-eye.sleep {
+  height: 6px;
+  border-radius: 6px;
+  background: #334155;
+  box-shadow: none;
+}
+.r-eye.sleep::before, .r-eye.sleep::after { opacity: 0; }
+
+/* Mũi & Miệng (Ẩn khi vào bảng học Karaoke để nhường diện tích cho chữ) */
+.r-nose {
+  width: 14px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(0, 229, 255, 0.45);
+  margin-top: 14px;
+  transition: opacity 0.25s;
+}
+
+.r-mouth {
+  width: 58px;
+  height: 16px;
+  margin-top: 12px;
+  border-radius: 0 0 30px 30px;
+  border-bottom: 5px solid var(--cyan);
+  transition: all 0.15s ease;
+}
+
+.r-mouth.speaking {
+  height: 28px;
+  background: rgba(0, 229, 255, 0.22);
+  border: 4px solid var(--cyan);
+  border-radius: 12px 12px 28px 28px;
+  animation: mouthPulse 0.22s infinite alternate;
+}
+
+@keyframes mouthPulse {
+  from { transform: scaleY(0.55) scaleX(0.94); }
+  to   { transform: scaleY(1.12) scaleX(1.04); }
+}
+
+.robot-stage.lesson-active .r-nose,
+.robot-stage.lesson-active .r-mouth {
+  display: none;
+}
+
+.face-caption {
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.robot-stage.lesson-active .face-caption {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* Khung Bảng Học Karaoke nửa dưới màn hình ngang */
+.karaoke-board {
+  width: 100%;
+  max-width: 920px;
+  background: rgba(8, 13, 26, 0.94);
+  border: 1.5px solid var(--border-neon);
+  border-radius: 18px;
+  padding: 12px 18px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.14);
+}
+
+.robot-stage.lesson-active .karaoke-board {
+  display: flex;
+}
+
+.lesson-meta-bar {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.karaoke-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+  padding: 4px 6px;
+  min-height: 44px;
+  align-items: center;
+}
+
+.k-word {
+  font-size: 26px;
+  font-weight: 700;
+  color: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  border: 1px solid transparent;
+}
+
+.k-word:active {
+  transform: scale(0.95);
+  background: rgba(0, 229, 255, 0.2);
+}
+
+.k-word.active-read {
+  color: #000000;
+  background: var(--cyan);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.85);
+  transform: scale(1.06);
+}
+
+.k-word.word-ok {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(20, 83, 45, 0.35);
+}
+
+.k-word.word-err {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.5);
+  background: rgba(136, 19, 55, 0.35);
+}
+
+.spelling-strip {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fde047;
+  letter-spacing: 2px;
+  min-height: 20px;
+}
+
+.vi-translation {
+  font-size: 15.5px;
+  color: #bae6fd;
+  text-align: center;
+}
+
+.vi-translation.hidden-vi {
+  filter: blur(5px);
+  cursor: pointer;
+}
+
+.speech-feedback {
+  font-size: 12.5px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  width: 100%;
+  text-align: center;
+}
+
+.lesson-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+/* Chỉ báo 4 nút vật lý ESP32 ở đáy màn hình */
+.hw-buttons-bar {
+  position: fixed;
+  bottom: 8px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+  z-index: 8500;
+}
+
+.hw-dot-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(10, 15, 28, 0.85);
+  color: #e2e8f0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hw-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Màn hình ngủ giả (Sleep Overlay) */
+.sleep-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8800;
+  background: #000000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.sleep-overlay.active {
+  display: flex;
+}
+
+.sleep-eyes {
+  display: flex;
+  gap: 60px;
+}
+
+.sleep-line {
+  width: 76px;
+  height: 5px;
+  border-radius: 5px;
+  background: #1e293b;
+  animation: breathe 3.6s infinite ease-in-out;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; transform: scaleX(0.95); }
+  50% { opacity: 0.9; transform: scaleX(1.05); }
+}

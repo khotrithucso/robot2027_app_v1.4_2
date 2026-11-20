@@ -1,0 +1,13 @@
+{
+  "name": "robot2027-companion-v1-4",
+  "version": "1.4.0",
+  "description": "Robot 2027 Companion App V1.4 Full (Restored from V1.3 + Server Iframes + Native Hardware Bridge)",
+  "scripts": {
+    "cap:sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.1.2",
+    "@capacitor/cli": "6.1.2",
+    "@capacitor/core": "6.1.2"
+  }
+}
