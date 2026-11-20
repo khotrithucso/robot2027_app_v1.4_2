@@ -181,7 +181,7 @@ public class RobotNativePlugin extends Plugin {
                     }
                     String rawSsid = info.getSSID();
                     if (rawSsid != null) {
-                        wifiSsid = rawSsid.replace(""", "");
+                        wifiSsid = rawSsid.replace("\"", "");
                     }
                     if (wifiSsid.isEmpty() || wifiSsid.contains("unknown ssid")) {
                         boolean hasLoc = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION)
