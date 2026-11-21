@@ -1,710 +1,751 @@
-// Robot 2027 V1.4 - Điều phối Trung tâm (6 Tabs, Server Iframes, Setting 8 Modules, Sub-panels 92%)
-window.AppController = (function () {
-  let activeTab = 'robot';
-  let pendingTabAfterPin = null;
-  let rewardInterval = null;
-  let selectedNotebookTopicId = null;
-  let notebookFilter = 'all';
+// ============================================================================
+// ROBOT 2027 COMPANION V1.4 PRO - FULL CONTROLLER
+// ============================================================================
 
-  function showToast(msg) {
-    const el = document.getElementById('toastBanner');
-    el.textContent = msg;
-    el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 2800);
-  }
+const Native = () => window.Capacitor?.Plugins?.RobotNative || null;
 
-  function isEntertainmentUnlocked() {
-    const s = window.RobotStorage.getSettings();
-    if (!s.studyOnlyLock) return true;
-    return Date.now() < (s.unlockUntilTs || 0);
-  }
-
-  function refreshHud() {
-    const profile = window.RobotStorage.getActiveProfile();
-    const settings = window.RobotStorage.getSettings();
-    const tel = window.HardwareBridge.getTelemetry();
-
-    document.getElementById('hudProfile').textContent = `👤 ${profile.name} • ★ ${profile.stars || 0}`;
-
-    const bleEl = document.getElementById('hudBle');
-    bleEl.textContent = tel.bleConnected ? `🔌 ${tel.bleDeviceName}` : '🔌 BLE Chờ';
-    bleEl.classList.toggle('ble-on', tel.bleConnected);
-
-    const chargeIcon = tel.isCharging ? '⚡' : '🔋';
-    document.getElementById('hudBattery').textContent = `${chargeIcon} ${tel.battery}% • ${tel.temp}°C`;
-
-    // Cập nhật trạng thái khóa 2 icon YouTube & Game
-    const unlocked = isEntertainmentUnlocked();
-    document.getElementById('nav-youtube').classList.toggle('locked', !unlocked);
-    document.getElementById('nav-game').classList.toggle('locked', !unlocked);
-
-    // Đếm ngược thời gian thưởng giải trí nếu đang mở
-    const timerPill = document.getElementById('hudRewardTimer');
-    if (settings.studyOnlyLock && unlocked) {
-      const remSec = Math.max(0, Math.floor((settings.unlockUntilTs - Date.now()) / 1000));
-      const mm = String(Math.floor(remSec / 60)).padStart(2, '0');
-      const ss = String(remSec % 60).padStart(2, '0');
-      timerPill.style.display = 'inline-flex';
-      timerPill.textContent = `⏳ Giải trí: ${mm}:${ss}`;
+// 1. TỰ SINH & LƯU VĨNH VIỄN UID TOKEN 20 KÝ TỰ NGẪU NHIÊN
+function getOrCreatePermanentUid() {
+  let uid = localStorage.getItem('robo_uid_20');
+  if (!uid || uid.length !== 20) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let token = '';
+    const randArr = new Uint32Array(20);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(randArr);
+      for (let i = 0; i < 20; i++) token += chars[randArr[i] % chars.length];
     } else {
-      timerPill.style.display = 'none';
+      for (let i = 0; i < 20; i++) token += chars[Math.floor(Math.random() * chars.length)];
     }
-
-    // Cập nhật thanh telemetry trong tab Setting
-    const setTel = document.getElementById('settingTelemetryBar');
-    if (setTel) {
-      setTel.innerHTML = `
-        <span>🤖 Bot ID: <b>${settings.botId}</b></span>
-        <span>📶 Wi-Fi: <b>${tel.wifiSsid}</b> (IP: <b>${tel.localIp}</b>)</span>
-        <span>${chargeIcon} Pin: <b>${tel.battery}%</b> (${tel.isCharging ? 'Đang sạc' : 'Dùng pin'})</span>
-        <span>🌡️ Nhiệt độ: <b>${tel.temp}°C</b></span>
-      `;
-    }
+    uid = token;
+    localStorage.setItem('robo_uid_20', uid);
   }
+  return uid;
+}
 
-  // Chuyển đổi giữa 6 màn hình đơn lớp (Single-Layer Architecture)
-  function switchTab(tabName, bypassSecurity = false) {
-    window.FaceLessonEngine.resetIdleTimer();
+const APP_UID = getOrCreatePermanentUid();
 
-    // 1. Kiểm tra khóa Chế độ Chỉ Học Tập cho YouTube & Game
-    if (!bypassSecurity && (tabName === 'youtube' || tabName === 'game')) {
-      if (!isEntertainmentUnlocked()) {
-        pendingTabAfterPin = tabName;
-        openUnlockRewardModal(tabName);
-        return;
-      }
-    }
+// 2. TRẠNG THÁI HỆ THỐNG
+let currentTab = 'robot';
+let starsCount = Math.max(0, parseInt(localStorage.getItem('robo_stars') || '5', 10));
+let parentPin = localStorage.getItem('robo_pin') || '1234';
+let studyOnlyMode = localStorage.getItem('robo_study_only') === '1';
+let baseServerUrl = (localStorage.getItem('robo_base_url') || 'https://khotrithucso.io.vn/robot2027_2_4/test1').replace(/\/+$/, '');
 
-    // 2. Kiểm tra khóa PIN 4 số cho tab Setting
-    if (!bypassSecurity && tabName === 'setting') {
-      const s = window.RobotStorage.getSettings();
-      if (s.requirePinForSetting) {
-        pendingTabAfterPin = 'setting';
-        document.getElementById('pinInputField').value = '';
-        document.getElementById('pinModalTitle').textContent = '🔒 Nhập Mã PIN Phụ Huynh (4 số)';
-        document.getElementById('pinModalDesc').textContent = 'Vui lòng nhập mã PIN để mở bảng Cài đặt hệ thống (mặc định: 1234).';
-        document.getElementById('pinModal').classList.add('open');
-        return;
-      }
-    }
+let pointPollTimer = null;
+let canPollPoints = false;
+let currentAudioPlayer = null;
+let lastChildHeardText = '';
+let idleTimer = null;
+let isSleeping = false;
+let bleCharacteristic = null;
 
-    // 3. Ngắt tài nguyên chéo khi rời tab cũ
-    if (activeTab === 'robot' && tabName !== 'robot') {
-      window.HardwareBridge.stopSpeak();
-      window.HardwareBridge.stopListening();
-    }
-    if (activeTab === 'youtube' && tabName !== 'youtube') {
-      const ytFrame = document.getElementById('youtubeIframe');
-      if (ytFrame) ytFrame.src = 'about:blank'; // Dừng hẳn tiếng video khi sang tab khác, tránh đè & màn hình đen
-    }
-    if (activeTab === 'game' && tabName !== 'game') {
-      const gmFrame = document.getElementById('gamesIframe');
-      if (gmFrame) gmFrame.src = 'about:blank';
-    }
-
-    activeTab = tabName;
-
-    // 4. Ẩn tất cả view, chỉ bật đúng view đang chọn
-    document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
-    const targetView = document.getElementById(`view-${tabName}`);
-    if (targetView) targetView.classList.add('active');
-
-    document.querySelectorAll('.nav-icon-btn').forEach(b => b.classList.remove('active'));
-    const navBtn = document.getElementById(`nav-${tabName}`);
-    if (navBtn) navBtn.classList.add('active');
-
-    // 5. Khởi tạo nội dung tương ứng từng tab
-    const settings = window.RobotStorage.getSettings();
-    const profile = window.RobotStorage.getActiveProfile();
-
-    if (tabName === 'notebook') {
-      renderNotebookView();
-    } else if (tabName === 'youtube') {
-      const ytFrame = document.getElementById('youtubeIframe');
-      const sep = settings.youtubeUrl.includes('?') ? '&' : '?';
-      const fullUrl = `${settings.youtubeUrl}${sep}bot_id=${encodeURIComponent(settings.botId)}&member=${encodeURIComponent(profile.name)}`;
-      document.getElementById('youtubeUrlLabel').textContent = settings.youtubeUrl;
-      ytFrame.src = fullUrl;
-      window.RobotStorage.appendLog({ type: 'open_youtube', url: settings.youtubeUrl });
-    } else if (tabName === 'game') {
-      const gmFrame = document.getElementById('gamesIframe');
-      const sep = settings.gamesUrl.includes('?') ? '&' : '?';
-      const fullUrl = `${settings.gamesUrl}${sep}bot_id=${encodeURIComponent(settings.botId)}&member=${encodeURIComponent(profile.name)}`;
-      document.getElementById('gamesUrlLabel').textContent = settings.gamesUrl;
-      document.getElementById('offlineGameBox').classList.remove('show');
-      gmFrame.src = fullUrl;
-      window.RobotStorage.appendLog({ type: 'open_game', url: settings.gamesUrl });
-    } else if (tabName === 'setting') {
-      populateSettingsUI();
-      refreshHud();
-    }
+// Dữ liệu mẫu dự phòng khi chưa tải mạng lần đầu
+const FALLBACK_TOPICS = [
+  {
+    index: 1,
+    topic: 'greetings_demo',
+    title: '1. Chào Hỏi & Làm Quen',
+    count: 3,
+    items: [
+      { id: 0, en: 'Hello! My name is Robo.', vi: 'Xin chào! Tên mình là Robo.', audio_url: '', spelling: [] },
+      { id: 1, en: 'How are you today?', vi: 'Hôm nay bạn khỏe không?', audio_url: '', spelling: [] },
+      { id: 2, en: 'Nice to meet you!', vi: 'Rất vui được gặp bạn!', audio_url: '', spelling: [] }
+    ]
   }
+];
 
-  function reloadCurrentIframe(type) {
-    const settings = window.RobotStorage.getSettings();
-    const profile = window.RobotStorage.getActiveProfile();
-    if (type === 'youtube') {
-      const ytFrame = document.getElementById('youtubeIframe');
-      const sep = settings.youtubeUrl.includes('?') ? '&' : '?';
-      ytFrame.src = `${settings.youtubeUrl}${sep}bot_id=${encodeURIComponent(settings.botId)}&member=${encodeURIComponent(profile.name)}&t=${Date.now()}`;
-      showToast('🔄 Đang tải lại trang YouTube...');
-    } else if (type === 'game') {
-      const gmFrame = document.getElementById('gamesIframe');
-      const sep = settings.gamesUrl.includes('?') ? '&' : '?';
-      document.getElementById('offlineGameBox').classList.remove('show');
-      gmFrame.src = `${settings.gamesUrl}${sep}bot_id=${encodeURIComponent(settings.botId)}&member=${encodeURIComponent(profile.name)}&t=${Date.now()}`;
-      showToast('🔄 Đang tải lại trang Game...');
-    }
-  }
+let topicsCatalog = JSON.parse(localStorage.getItem('robo_topics_catalog_v14') || 'null') || FALLBACK_TOPICS;
+let activeTopicIndex = 0;
+let activeSentenceIndex = 0;
 
-  // Hộp thoại đổi Sao mở khóa YouTube/Game hoặc nhập PIN phụ huynh
-  function openUnlockRewardModal(targetTab) {
-    const profile = window.RobotStorage.getActiveProfile();
-    const cost = window.ROBOT_CONFIG.STAR_COST_PER_10_MIN;
-    const label = targetTab === 'youtube' ? '▶️ YouTube' : '🎮 Game';
-    document.getElementById('rewardModalTitle').textContent = `🔒 ${label} đang ở Chế độ Chỉ Học Tập`;
-    document.getElementById('rewardModalDesc').innerHTML =
-      `Hiện tại bạn đang có <b>★ ${profile.stars || 0}</b>.<br>` +
-      `• Dùng <b>${cost} ★</b> để mở khóa <b>10 phút</b> giải trí ngay.<br>` +
-      `• Hoặc nhờ Bố/Mẹ nhập mã PIN để mở khóa.`;
-    const btnRedeem = document.getElementById('btnRedeemStars');
-    btnRedeem.disabled = (profile.stars || 0) < cost;
-    btnRedeem.textContent = `⭐ Đổi ${cost} ★ lấy 10 phút`;
-    document.getElementById('rewardUnlockModal').classList.add('open');
+// ============================================================================
+// 3. KHỞI TẠO ỨNG DỤNG
+// ============================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  updateStarsUI(starsCount, false);
+  document.getElementById('chkStudyOnly').checked = studyOnlyMode;
 
-    window.HardwareBridge.speak('Đang trong giờ học tập! Bạn có thể đổi sao thưởng hoặc nhờ bố mẹ mở khóa nhé.', 'vi-VN', 1.0);
-  }
+  renderStudyTopics();
+  renderCurrentLesson();
+  resetIdleTimer();
 
-  function redeemStarsForPlay() {
-    const cost = window.ROBOT_CONFIG.STAR_COST_PER_10_MIN;
-    const profile = window.RobotStorage.getActiveProfile();
-    if ((profile.stars || 0) < cost) return;
-
-    window.RobotStorage.updateActiveProfile(p => {
-      p.stars = (p.stars || 0) - cost;
-    });
-    window.RobotStorage.saveSettings({
-      unlockUntilTs: Date.now() + 10 * 60 * 1000
-    });
-    document.getElementById('rewardUnlockModal').classList.remove('open');
-    refreshHud();
-    showToast('🎉 Đã mở khóa 10 phút giải trí!');
-    if (pendingTabAfterPin) {
-      const target = pendingTabAfterPin;
-      pendingTabAfterPin = null;
-      switchTab(target, true);
-    }
-  }
-
-  function openParentPinFromReward() {
-    document.getElementById('rewardUnlockModal').classList.remove('open');
-    document.getElementById('pinInputField').value = '';
-    document.getElementById('pinModalTitle').textContent = '🔑 Mã PIN Phụ Huynh Mở Khóa Giải Trí';
-    document.getElementById('pinModalDesc').textContent = 'Nhập mã PIN 4 số (mặc định 1234) để mở khóa 15 phút.';
-    document.getElementById('pinModal').classList.add('open');
-  }
-
-  function verifyParentPin() {
-    const val = document.getElementById('pinInputField').value.trim();
-    const s = window.RobotStorage.getSettings();
-    if (val === s.parentPin) {
-      document.getElementById('pinModal').classList.remove('open');
-      if (pendingTabAfterPin === 'youtube' || pendingTabAfterPin === 'game') {
-        window.RobotStorage.saveSettings({ unlockUntilTs: Date.now() + 15 * 60 * 1000 });
-        refreshHud();
-      }
-      const next = pendingTabAfterPin;
-      pendingTabAfterPin = null;
-      if (next) switchTab(next, true);
-    } else {
-      showToast('❌ Mã PIN chưa chính xác!');
-    }
-  }
-
-  // --- Sổ Học Tập (32 Chủ đề + Đồng bộ Server api.php) ---
-  function renderNotebookView() {
-    const topics = window.RobotStorage.getTopics();
-    const profile = window.RobotStorage.getActiveProfile();
-    const settings = window.RobotStorage.getSettings();
-    const query = (document.getElementById('topicSearchInput').value || '').toLowerCase().trim();
-
-    document.getElementById('btnLessonModeToggle').textContent =
-      settings.lessonMode === 'random' ? '🔀 Chế độ: Ngẫu nhiên' : '🔢 Chế độ: Thứ tự';
-
-    if (!selectedNotebookTopicId && topics.length > 0) {
-      selectedNotebookTopicId = topics[0].id;
-    }
-
-    const grid = document.getElementById('topicsGrid');
-    const filteredTopics = topics.filter(t => t.name.toLowerCase().includes(query) || t.id.toLowerCase().includes(query));
-
-    grid.innerHTML = filteredTopics.map(t => {
-      const total = (t.items || []).length;
-      const done = (t.items || []).filter(it => profile.mastered && profile.mastered[`${t.id}_${it.id}`]).length;
-      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      const isSel = t.id === selectedNotebookTopicId;
-      return `
-        <div class="topic-card ${isSel ? 'selected' : ''}" onclick="AppController.selectNotebookTopic('${t.id}')">
-          <div class="topic-card-top">
-            <span>${t.icon || '📘'} ${t.name}</span>
-            <span style="color:var(--cyan);font-size:12px;">${pct}%</span>
-          </div>
-          <div style="font-size:11.5px;color:var(--text-muted);">${done}/${total} câu đã thuộc</div>
-          <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-        </div>
-      `;
-    }).join('');
-
-    renderNotebookSentences();
-  }
-
-  function selectNotebookTopic(topicId) {
-    selectedNotebookTopicId = topicId;
-    renderNotebookView();
-  }
-
-  function setNotebookFilter(f) {
-    notebookFilter = f;
-    renderNotebookSentences();
-  }
-
-  function renderNotebookSentences() {
-    const topics = window.RobotStorage.getTopics();
-    const profile = window.RobotStorage.getActiveProfile();
-    const topic = topics.find(t => t.id === selectedNotebookTopicId) || topics[0];
-    if (!topic) return;
-
-    document.getElementById('selectedTopicHeader').textContent = `${topic.icon || '📘'} Danh sách câu: ${topic.name}`;
-    const listEl = document.getElementById('sentencesList');
-
-    const items = (topic.items || []).filter(it => {
-      const isDone = !!(profile.mastered && profile.mastered[`${topic.id}_${it.id}`]);
-      if (notebookFilter === 'mastered') return isDone;
-      if (notebookFilter === 'review') return !isDone;
-      return true;
-    });
-
-    if (items.length === 0) {
-      listEl.innerHTML = `<div style="color:var(--text-muted);font-size:13px;padding:12px;">Không có câu nào trong bộ lọc này.</div>`;
-      return;
-    }
-
-    listEl.innerHTML = items.map((it, idx) => {
-      const isDone = !!(profile.mastered && profile.mastered[`${topic.id}_${it.id}`]);
-      return `
-        <div class="sentence-row" onclick="AppController.launchSentenceInRobot('${topic.id}', ${idx})">
-          <div>
-            <div style="font-weight:700;font-size:14px;color:#f8fafc;">${isDone ? '✅' : '🔹'} ${it.en}</div>
-            <div style="font-size:12px;color:#94a3b8;margin-top:2px;">${it.vi}</div>
-          </div>
-          <button class="btn-neon" style="padding:5px 10px;font-size:12px;">Học ngay ▶</button>
-        </div>
-      `;
-    }).join('');
-  }
-
-  function launchSentenceInRobot(topicId, idx) {
-    switchTab('robot', true);
-    window.FaceLessonEngine.startTopic(topicId, idx);
-  }
-
-  function toggleLessonOrderMode() {
-    const s = window.RobotStorage.getSettings();
-    const next = s.lessonMode === 'random' ? 'sequential' : 'random';
-    window.RobotStorage.saveSettings({ lessonMode: next });
-    renderNotebookView();
-    showToast(next === 'random' ? '🔀 Đã bật chế độ học Ngẫu nhiên' : '🔢 Đã bật chế độ học Thứ tự');
-  }
-
-  async function syncTopicsFromServer() {
-    const s = window.RobotStorage.getSettings();
-    showToast('🔄 Đang đồng bộ chủ đề từ Server...');
+  const plugin = Native();
+  if (plugin) {
     try {
-      const res = await fetch(`${s.apiUrl}?action=manifest`, { cache: 'no-store' });
+      await plugin.requestAllPermissions();
+      plugin.addListener('ttsStart', () => setRobotExpression('speaking'));
+      plugin.addListener('ttsEnd', () => setRobotExpression('idle'));
+      plugin.addListener('speechResult', (res) => onSpeechRecognized(res.text || ''));
+      plugin.addListener('speechError', () => {
+        setRobotExpression('idle');
+        document.getElementById('pronounceFeedback').textContent = 'Chưa nghe rõ, bé bấm "Bé đọc" và nói lại nhé!';
+      });
+    } catch (e) {
+      console.warn('Native plugin init:', e);
+    }
+  }
+
+  refreshDeviceStatus();
+  setInterval(refreshDeviceStatus, 15000);
+
+  // Tự động đồng bộ danh sách 32 chủ đề & hồ sơ từ Server khi khởi động
+  syncProfileAndProgress();
+  if (topicsCatalog.length <= 1) {
+    syncStudyPacks(false);
+  }
+
+  ['touchstart', 'click', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, () => {
+      if (isSleeping) wakeUpRobot();
+      resetIdleTimer();
+    }, { passive: true });
+  });
+});
+
+// ============================================================================
+// 4. ĐIỀU HƯỚNG TAB, IFRAME TRÀN VIỀN & ĐỒNG BỘ ĐIỂM 2 GIÂY/LẦN
+// ============================================================================
+function switchTab(tabName) {
+  // Kiểm tra khóa Chế độ Chỉ Học Tập khi mở YouTube hoặc Game
+  if ((tabName === 'youtube' || tabName === 'game') && studyOnlyMode) {
+    const msg = 'Đang trong giờ học tập, nhờ bố mẹ mở khóa trong Cài đặt nhé!';
+    speakText(msg, 'vi-VN', 1.0);
+    alert(msg);
+    return;
+  }
+
+  currentTab = tabName;
+
+  // Cập nhật trạng thái active của nút trên thanh dock
+  document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+
+  // Hiện/Ẩn nút Refresh động ở đầu bên trái thanh icon
+  const btnRefresh = document.getElementById('btnRefreshIframe');
+  const divider = document.getElementById('navRefreshDivider');
+  const isEntertainment = (tabName === 'youtube' || tabName === 'game');
+  btnRefresh.classList.toggle('hidden', !isEntertainment);
+  divider.classList.toggle('hidden', !isEntertainment);
+
+  // Chuyển vùng hiển thị tab
+  document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+  const targetPane = document.getElementById('tab-' + tabName);
+  if (targetPane) targetPane.classList.add('active');
+
+  // Dừng âm thanh/micro của Robot khi rời tab Robot
+  if (tabName !== 'robot') {
+    stopRobotAudioAndMic();
+  }
+
+  // Tắt iframe bên kia & dừng polling cũ để không phát chồng tiếng và tiết kiệm tài nguyên
+  stopPointPolling();
+  const ytFrame = document.getElementById('ytFrame');
+  const gameFrame = document.getElementById('gameFrame');
+
+  if (tabName === 'youtube') {
+    gameFrame.src = 'about:blank';
+    canPollPoints = false;
+    ytFrame.onload = () => {
+      // Sau khi trang youtube.php nhận ?uid=...&stars=... và redirect xong, bật đồng bộ 2s
+      setTimeout(() => { canPollPoints = true; }, 700);
+    };
+    ytFrame.src = `${baseServerUrl}/youtube.php?uid=${encodeURIComponent(APP_UID)}&stars=${starsCount}`;
+    startPointPolling();
+    logUserActivity('YOUTUBE_OPEN', 'Mở tab YouTube');
+  } else if (tabName === 'game') {
+    ytFrame.src = 'about:blank';
+    canPollPoints = false;
+    gameFrame.onload = () => {
+      setTimeout(() => { canPollPoints = true; }, 700);
+    };
+    gameFrame.src = `${baseServerUrl}/games.php?uid=${encodeURIComponent(APP_UID)}&stars=${starsCount}`;
+    startPointPolling();
+    logUserActivity('GAME_OPEN', 'Mở tab Game');
+  } else {
+    // Rời khỏi tab giải trí -> giải phóng iframe để ngừng phát nhạc/game
+    ytFrame.src = 'about:blank';
+    gameFrame.src = 'about:blank';
+  }
+}
+
+// Nút Refresh động trên thanh Icon Bar
+function refreshActiveIframe() {
+  if (currentTab === 'youtube') {
+    const ytFrame = document.getElementById('ytFrame');
+    ytFrame.src = `${baseServerUrl}/youtube.php?uid=${encodeURIComponent(APP_UID)}&_r=${Date.now()}`;
+  } else if (currentTab === 'game') {
+    const gameFrame = document.getElementById('gameFrame');
+    gameFrame.src = `${baseServerUrl}/games.php?uid=${encodeURIComponent(APP_UID)}&_r=${Date.now()}`;
+  }
+}
+
+// Tự động GET điểm từ api_point.php mỗi 2 giây khi đang ở tab YouTube hoặc Game
+function startPointPolling() {
+  stopPointPolling();
+  pointPollTimer = setInterval(async () => {
+    if (!canPollPoints || (currentTab !== 'youtube' && currentTab !== 'game')) return;
+    try {
+      const url = `${baseServerUrl}/api_point.php?uid=${encodeURIComponent(APP_UID)}&_t=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
       const data = await res.json();
-      if (data && Array.isArray(data.topics) && data.topics.length > 0) {
-        const current = window.RobotStorage.getTopics();
-        const map = {};
-        current.forEach(t => { map[t.id] = t; });
-
-        for (const meta of data.topics.slice(0, 32)) {
-          const tid = meta.topic || meta.id;
-          if (!tid) continue;
-          try {
-            const dRes = await fetch(`${s.apiUrl}?action=download&topic=${encodeURIComponent(tid)}`);
-            const dJson = await dRes.json();
-            if (dJson && Array.isArray(dJson.items) && dJson.items.length > 0) {
-              map[tid] = {
-                id: tid,
-                name: meta.title || tid.toUpperCase(),
-                icon: '📚',
-                items: dJson.items.map((x, idx) => ({
-                  id: x.id || (idx + 1),
-                  en: x.in || x.en || '',
-                  vi: (x.out && (x.out.vi_hint || x.out.vi)) || x.vi || 'Câu giao tiếp tiếng Anh',
-                  spell: x.spell || {}
-                }))
-              };
-            }
-          } catch (e) {}
+      if (data && data.status === 'ok' && typeof data.stars === 'number') {
+        const serverStars = Math.max(0, parseInt(data.stars, 10));
+        if (serverStars !== starsCount) {
+          updateStarsUI(serverStars, false);
         }
-
-        const merged = Object.values(map);
-        window.RobotStorage.saveTopics(merged);
-        renderNotebookView();
-        showToast(`✅ Đã đồng bộ xong ${merged.length} chủ đề Offline!`);
-      } else {
-        showToast('⚠️ Server chưa có gói mới, giữ nguyên 8 chủ đề Offline.');
       }
     } catch (e) {
-      showToast('📴 Đang Offline: Dùng sẵn 8 chủ đề tích hợp trong máy.');
+      // Bỏ qua lỗi mạng tạm thời giữa các chu kỳ 2s
+    }
+  }, 2000);
+}
+
+function stopPointPolling() {
+  canPollPoints = false;
+  if (pointPollTimer) {
+    clearInterval(pointPollTimer);
+    pointPollTimer = null;
+  }
+}
+
+function updateStarsUI(newVal, pushToServer = false) {
+  starsCount = Math.max(0, parseInt(newVal, 10) || 0);
+  localStorage.setItem('robo_stars', String(starsCount));
+  document.getElementById('profileStarPill').textContent = `👤 Bé Bi • ★ ${starsCount}`;
+
+  // Nếu bé vừa đọc tiếng Anh được cộng sao, đẩy cập nhật lên server để đồng bộ ngay với api_point.php
+  if (pushToServer) {
+    fetch(`${baseServerUrl}/games.php?uid=${encodeURIComponent(APP_UID)}&stars=${starsCount}`, {
+      method: 'GET',
+      cache: 'no-store'
+    }).catch(() => {});
+  }
+}
+
+// ============================================================================
+// 5. KẾT NỐI API.PHP (32 CHỦ ĐỀ, DOWNLOAD OFFLINE, MP3 BẢN XỨ, ĐÁNH VẦN)
+// ============================================================================
+function renderStudyTopics() {
+  const grid = document.getElementById('topicsGrid');
+  document.getElementById('topicsCountLabel').textContent = String(topicsCatalog.length);
+  grid.innerHTML = '';
+
+  topicsCatalog.forEach((t, idx) => {
+    const cachedPack = getCachedTopicPack(t.topic);
+    const totalCount = cachedPack ? cachedPack.items.length : (t.count || (t.items ? t.items.length : 0));
+    const statusText = cachedPack ? '✅ Đã lưu Offline' : '☁️ Chạm để tải & học';
+
+    const card = document.createElement('div');
+    card.className = 'topic-card' + (idx === activeTopicIndex ? ' selected' : '');
+    card.innerHTML = `
+      <div class="t-title">${t.index ? t.index + '. ' : ''}${t.title}</div>
+      <div class="t-meta">${totalCount} câu • ${statusText}</div>
+    `;
+    card.onclick = () => selectAndLoadTopic(idx);
+    grid.appendChild(card);
+  });
+}
+
+function getCachedTopicPack(topicSlug) {
+  if (!topicSlug) return null;
+  try {
+    return JSON.parse(localStorage.getItem('robo_pack_' + topicSlug) || 'null');
+  } catch (e) {
+    return null;
+  }
+}
+
+async function syncStudyPacks(showAlert = true) {
+  try {
+    const res = await fetch(`${baseServerUrl}/api.php?action=topics&_t=${Date.now()}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (data && data.status === 'ok' && Array.isArray(data.topics) && data.topics.length > 0) {
+      topicsCatalog = data.topics;
+      localStorage.setItem('robo_topics_catalog_v14', JSON.stringify(topicsCatalog));
+      renderStudyTopics();
+      if (showAlert) {
+        alert(`Đã đồng bộ danh sách ${topicsCatalog.length} chủ đề (${data.total_sentences} câu) từ Server!`);
+      }
+    } else if (showAlert) {
+      alert('Không lấy được danh sách chủ đề mới từ api.php.');
+    }
+  } catch (e) {
+    if (showAlert) alert('Đang mất kết nối mạng, sử dụng dữ liệu đã lưu Offline.');
+  }
+}
+
+async function selectAndLoadTopic(idx) {
+  activeTopicIndex = idx;
+  activeSentenceIndex = 0;
+  const meta = topicsCatalog[idx];
+  if (!meta) return;
+
+  let pack = getCachedTopicPack(meta.topic);
+
+  // Tải gói câu từ api.php?action=download nếu chưa lưu offline hoặc version_hash thay đổi
+  if (!pack || (meta.version_hash && pack.version_hash !== meta.version_hash)) {
+    try {
+      const res = await fetch(`${baseServerUrl}/api.php?action=download&topic=${encodeURIComponent(meta.topic)}`);
+      const data = await res.json();
+      if (data && data.status === 'ok' && Array.isArray(data.items) && data.items.length > 0) {
+        pack = {
+          topic: data.topic,
+          title: data.title,
+          version_hash: data.version_hash,
+          items: data.items
+        };
+        localStorage.setItem('robo_pack_' + meta.topic, JSON.stringify(pack));
+      }
+    } catch (e) {
+      console.warn('Download topic fallback:', e);
     }
   }
 
-  // --- Setting & Sub-panels 92% ---
-  function populateSettingsUI() {
-    const s = window.RobotStorage.getSettings();
-    document.getElementById('sliderBrightness').value = s.brightness;
-    document.getElementById('valBrightness').textContent = s.brightness + '%';
-    document.getElementById('sliderVolume').value = s.volume;
-    document.getElementById('valVolume').textContent = s.volume + '%';
-    document.getElementById('sliderTtsRate').value = Math.round(s.ttsRate * 100);
-    document.getElementById('valTtsRate').textContent = s.ttsRate.toFixed(2) + 'x';
+  renderStudyTopics();
+  renderCurrentLesson();
+  switchTab('robot');
+  document.getElementById('faceBox').classList.add('docked');
+  playCurrentSentence();
+}
 
-    document.getElementById('inpApiUrl').value = s.apiUrl;
-    document.getElementById('inpYoutubeUrl').value = s.youtubeUrl;
-    document.getElementById('inpGamesUrl').value = s.gamesUrl;
+function getActiveLessonItems() {
+  const meta = topicsCatalog[activeTopicIndex] || topicsCatalog[0];
+  const cached = getCachedTopicPack(meta.topic);
+  if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
+    return { title: meta.title, slug: meta.topic, items: cached.items };
+  }
+  return { title: meta.title, slug: meta.topic, items: meta.items || FALLBACK_TOPICS[0].items };
+}
 
-    document.getElementById('chkStudyOnly').checked = !!s.studyOnlyLock;
-    document.getElementById('chkRequirePin').checked = !!s.requirePinForSetting;
-    document.getElementById('chkAutoCharge').checked = !!s.autoChargeGuard;
-    document.getElementById('chkBleSync').checked = !!s.bleSyncEnabled;
-    document.getElementById('chkTiltAlert').checked = !!s.tiltAlert;
-    document.getElementById('chkDevAntiSwipe').checked = !!s.devAntiSwipe;
-    document.getElementById('chkBedtime').checked = !!s.bedtimeEnabled;
-    document.getElementById('inpBedStart').value = s.bedtimeStart;
-    document.getElementById('inpBedEnd').value = s.bedtimeEnd;
+function renderCurrentLesson() {
+  const lesson = getActiveLessonItems();
+  const item = lesson.items[activeSentenceIndex] || lesson.items[0];
+
+  document.getElementById('lessonTopicBadge').textContent = `${lesson.title} (${activeSentenceIndex + 1}/${lesson.items.length})`;
+
+  const words = item.en.split(/\s+/);
+  document.getElementById('karaokeEn').innerHTML = words
+    .map((w, i) => `<span class="word" id="kw_${i}">${w}</span>`)
+    .join(' ');
+
+  // Tạo chuỗi đánh vần từng chữ cái từ dữ liệu spelling của api.php (hoặc tự tách)
+  if (Array.isArray(item.spelling) && item.spelling.length > 0) {
+    document.getElementById('karaokeSpell').textContent = item.spelling
+      .map(s => `${s.word.toUpperCase()}: ${s.spell}`)
+      .join('  |  ');
+  } else {
+    document.getElementById('karaokeSpell').textContent = words
+      .map(w => {
+        const clean = w.replace(/[^a-zA-Z]/g, '').toUpperCase();
+        return clean ? `${clean}: ${clean.split('').join('-')}` : '';
+      })
+      .filter(Boolean)
+      .join('  |  ');
   }
 
-  function onBrightnessChange(val) {
-    const n = parseInt(val, 10);
-    document.getElementById('valBrightness').textContent = n + '%';
-    window.RobotStorage.saveSettings({ brightness: n });
-    window.HardwareBridge.setBrightness(n);
-  }
+  document.getElementById('karaokeVi').textContent = item.vi || '(Chưa có dịch tiếng Việt)';
+  document.getElementById('pronounceFeedback').textContent = 'Bấm "Bé đọc" để luyện phát âm nhận sao ★!';
+  lastChildHeardText = '';
+  document.getElementById('btnReplayHeard').disabled = true;
+}
 
-  function onVolumeChange(val) {
-    const n = parseInt(val, 10);
-    document.getElementById('valVolume').textContent = n + '%';
-    window.RobotStorage.saveSettings({ volume: n });
-    window.HardwareBridge.setVolume(n);
-  }
+function toggleDockEyes() {
+  document.getElementById('faceBox').classList.toggle('docked');
+}
 
-  function onTtsRateChange(val) {
-    const rate = parseInt(val, 10) / 100;
-    document.getElementById('valTtsRate').textContent = rate.toFixed(2) + 'x';
-    window.RobotStorage.saveSettings({ ttsRate: rate });
-  }
+function nextSentence() {
+  const lesson = getActiveLessonItems();
+  activeSentenceIndex = (activeSentenceIndex + 1) % lesson.items.length;
+  renderCurrentLesson();
+  playCurrentSentence();
+}
 
-  function saveServerUrls() {
-    const apiUrl = document.getElementById('inpApiUrl').value.trim() || window.ROBOT_CONFIG.DEFAULT_API_URL;
-    const youtubeUrl = document.getElementById('inpYoutubeUrl').value.trim() || window.ROBOT_CONFIG.DEFAULT_YOUTUBE_URL;
-    const gamesUrl = document.getElementById('inpGamesUrl').value.trim() || window.ROBOT_CONFIG.DEFAULT_GAMES_URL;
-    window.RobotStorage.saveSettings({ apiUrl, youtubeUrl, gamesUrl });
-    showToast('💾 Đã lưu cấu hình Server API, YouTube & Game!');
-  }
+function prevSentence() {
+  const lesson = getActiveLessonItems();
+  activeSentenceIndex = (activeSentenceIndex - 1 + lesson.items.length) % lesson.items.length;
+  renderCurrentLesson();
+  playCurrentSentence();
+}
 
-  function resetDefaultServerUrls() {
-    window.RobotStorage.saveSettings({
-      apiUrl: window.ROBOT_CONFIG.DEFAULT_API_URL,
-      userApiUrl: window.ROBOT_CONFIG.DEFAULT_USER_API_URL,
-      youtubeUrl: window.ROBOT_CONFIG.DEFAULT_YOUTUBE_URL,
-      gamesUrl: window.ROBOT_CONFIG.DEFAULT_GAMES_URL
-    });
-    populateSettingsUI();
-    showToast('🔄 Đã khôi phục URL Server V1.4 mặc định!');
-  }
+async function playCurrentSentence() {
+  const lesson = getActiveLessonItems();
+  const item = lesson.items[activeSentenceIndex] || lesson.items[0];
+  const rate = parseFloat(document.getElementById('ttsSpeedSelect').value || '0.95');
 
-  function toggleSettingBool(key, checked) {
-    const patch = {};
-    patch[key] = !!checked;
-    if (key === 'studyOnlyLock' && !checked) {
-      patch.unlockUntilTs = Date.now() + 60 * 60 * 1000;
-    }
-    window.RobotStorage.saveSettings(patch);
-    if (key === 'devAntiSwipe') {
-      window.HardwareBridge.setKioskMode(!!checked);
-    }
-    refreshHud();
-    showToast('✅ Đã cập nhật thiết lập!');
-  }
+  stopRobotAudioAndMic();
 
-  function changeParentPin() {
-    const newPin = prompt('Nhập mã PIN Phụ huynh mới (4 chữ số):', '1234');
-    if (newPin && /^\d{4}$/.test(newPin.trim())) {
-      window.RobotStorage.saveSettings({ parentPin: newPin.trim() });
-      showToast('🔑 Đã đổi mã PIN Phụ huynh thành công!');
-    } else if (newPin !== null) {
-      showToast('⚠️ Mã PIN phải gồm đúng 4 chữ số!');
-    }
-  }
+  // Hiệu ứng tô sáng từng chữ Karaoke
+  const words = item.en.split(/\s+/);
+  words.forEach((_, idx) => {
+    setTimeout(() => {
+      document.querySelectorAll('.k-en .word').forEach(el => el.classList.remove('active'));
+      const wEl = document.getElementById('kw_' + idx);
+      if (wEl) wEl.classList.add('active');
+    }, idx * (350 / rate));
+  });
+  setTimeout(() => {
+    document.querySelectorAll('.k-en .word').forEach(el => el.classList.remove('active'));
+  }, words.length * (370 / rate) + 300);
 
-  function exitKioskManufacturer() {
-    const code = prompt('Nhập Mã PIN 6 số Nhà Sản Xuất để thoát chế độ Robot Vĩnh Viễn:');
-    if (code === window.ROBOT_CONFIG.MANUFACTURER_EXIT_PIN) {
-      window.HardwareBridge.setKioskMode(false);
-      showToast('🔓 Đã tắt khóa Kiosk! Bạn có thể vuốt thoát về màn hình chính Android.');
-    } else if (code !== null) {
-      showToast('❌ Sai mã PIN Nhà Sản Xuất!');
-    }
-  }
-
-  // Quản lý Sub-panel 92% (Tối đa 2 lớp, có nút X lớn góc phải)
-  function openSubPanel(type) {
-    const backdrop = document.getElementById('subPanelBackdrop');
-    const titleEl = document.getElementById('subPanelTitle');
-    const bodyEl = document.getElementById('subPanelContent');
-    backdrop.classList.add('open');
-
-    if (type === 'ble') {
-      titleEl.textContent = '🔌 Kết Nối Bluetooth BLE & Điều Khiển Phần Cứng ESP32';
-      bodyEl.innerHTML = `
-        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-          <button class="btn-neon" onclick="AppController.scanBleList()">🔍 Quét thiết bị ESP32 xung quanh</button>
-          <button class="btn-neon green" onclick="HardwareBridge.sendBleCommand('M:WAVE')">👋 Test Vẫy Tay (M:WAVE)</button>
-          <button class="btn-neon green" onclick="HardwareBridge.sendBleCommand('M:NOD')">🙂 Test Gật Đầu (M:NOD)</button>
-          <button class="btn-neon amber" onclick="HardwareBridge.sendBleCommand('CHG:OFF')">🔋 Ngắt Sạc (CHG:OFF)</button>
-          <button class="btn-neon amber" onclick="HardwareBridge.sendBleCommand('CHG:ON')">⚡ Mở Sạc (CHG:ON)</button>
-        </div>
-        <div id="bleDeviceList" style="display:flex;flex-direction:column;gap:8px;">
-          <div style="color:var(--text-muted);font-size:13px;">Bấm "Quét thiết bị ESP32 xung quanh" để tìm mạch điều khiển thân robot.</div>
-        </div>
-      `;
-    } else if (type === 'report') {
-      const profile = window.RobotStorage.getActiveProfile();
-      const logs = window.RobotStorage.getLogs();
-      const masteredCount = Object.keys(profile.mastered || {}).length;
-      const weakWords = Object.entries(profile.mistakes || {})
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 12)
-        .map(([w, c]) => `<span class="hud-pill" style="border-color:var(--rose);">${w} (${c} lần)</span>`)
-        .join(' ') || '<span style="color:var(--text-muted)">Chưa có từ sai nào!</span>';
-
-      titleEl.textContent = `📊 Nhật Ký & Báo Cáo Học Tập — ${profile.name}`;
-      bodyEl.innerHTML = `
-        <div class="setting-telemetry">
-          <span>👤 Học viên: <b>${profile.name}</b></span>
-          <span>⭐ Tổng Sao: <b>${profile.stars || 0} ★</b></span>
-          <span>✅ Câu đã thuộc: <b>${masteredCount} câu</b></span>
-          <span>⏱️ Thời gian học: <b>${Math.round((profile.studySeconds || 0) / 60)} phút</b></span>
-        </div>
-        <h4 style="color:var(--cyan);margin:10px 0 8px;">⚠️ Các từ bé phát âm còn sai nhiều (Cần ôn):</h4>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">${weakWords}</div>
-        <h4 style="color:var(--cyan);margin:10px 0 8px;">🕒 Lịch sử hoạt động gần đây:</h4>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${logs.slice(0, 20).map(l => `
-            <div class="sentence-row" style="cursor:default;">
-              <span style="font-size:12.5px;">${new Date(l.ts).toLocaleTimeString()} — <b>${l.type}</b>: ${l.sentence || l.topic || l.url || ''}</span>
-              <span style="color:var(--green);font-size:12px;">${l.score ? l.score + '%' : ''}</span>
-            </div>
-          `).join('') || '<div style="color:var(--text-muted);font-size:13px;">Chưa có nhật ký hoạt động.</div>'}
-        </div>
-      `;
-    } else if (type === 'profiles') {
-      const s = window.RobotStorage.getSettings();
-      const profiles = window.RobotStorage.getProfiles();
-      titleEl.textContent = '👤 Cá Nhân Hóa Tên Robot & Hồ Sơ Gia Đình';
-      bodyEl.innerHTML = `
-        <div class="set-card" style="margin-bottom:14px;">
-          <div class="set-card-title">🤖 Tên gọi Robot (Từ khóa đánh thức giọng nói)</div>
-          <div style="display:flex;gap:8px;">
-            <input id="inpRobotNameSub" class="input-field" value="${s.robotName}" placeholder="Ví dụ: Lucky, Robo, Bi..." />
-            <button class="btn-neon green" onclick="AppController.saveRobotName()">Lưu tên</button>
-          </div>
-          <div style="font-size:12px;color:var(--text-muted);">Khi robot ngủ, bé chỉ cần nói: <b>"Hello ${s.robotName}"</b>, <b>"Hello"</b> hoặc <b>"${s.robotName}"</b> để đánh thức!</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <h4 style="color:var(--cyan);">👨‍👩‍👧‍👦 Danh sách hồ sơ người học:</h4>
-          <button class="btn-neon" onclick="AppController.addNewProfile()">+ Thêm thành viên</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          ${profiles.map(p => `
-            <div class="sentence-row" style="cursor:default;border-color:${p.id === s.activeProfileId ? 'var(--cyan)' : 'rgba(148,163,184,0.2)'}">
-              <div>
-                <b>${p.name}</b> (${p.age} tuổi) • ⭐ ${p.stars || 0} ★ • ✅ ${Object.keys(p.mastered || {}).length} câu
-              </div>
-              <button class="btn-neon ${p.id === s.activeProfileId ? 'green' : ''}" onclick="AppController.selectProfile('${p.id}')">
-                ${p.id === s.activeProfileId ? 'Đang chọn ✓' : 'Chọn hồ sơ'}
-              </button>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    } else if (type === 'camera') {
-      titleEl.textContent = '📹 Giám Sát Camera Trước (WebRTC P2P) & Cảm Biến';
-      bodyEl.innerHTML = `
-        <p style="font-size:13px;color:#cbd5e1;margin-bottom:12px;">
-          Truyền hình ảnh trực tiếp từ camera trước của robot tới trình duyệt điện thoại phụ huynh qua <b>WebRTC Peer-to-Peer</b> (0% tốn băng thông video của hosting).
-        </p>
-        <div style="display:flex;gap:10px;margin-bottom:12px;">
-          <button class="btn-neon green" onclick="AppController.toggleCameraPreview(true)">📹 Bật Camera Giám Sát</button>
-          <button class="btn-neon rose" onclick="AppController.toggleCameraPreview(false)">⏹️ Tắt Camera (Mát máy)</button>
-        </div>
-        <div id="camStatusText" style="font-size:12.5px;color:var(--amber);margin-bottom:10px;">Camera đang tắt để tiết kiệm pin.</div>
-        <video id="frontCamVideo" autoplay playsinline muted style="width:100%;max-width:420px;border-radius:14px;border:1px solid var(--cyan);background:#000;"></video>
-      `;
+  // Ưu tiên phát file MP3 bản xứ từ api.php nếu có audio_url
+  if (item.audio_url) {
+    try {
+      setRobotExpression('speaking');
+      currentAudioPlayer = new Audio(item.audio_url);
+      currentAudioPlayer.playbackRate = rate;
+      currentAudioPlayer.onended = () => setRobotExpression('idle');
+      currentAudioPlayer.onerror = () => speakText(item.en, 'en-US', rate);
+      await currentAudioPlayer.play();
+      return;
+    } catch (e) {
+      // Fallback sang TTS bên dưới
     }
   }
 
-  function closeSubPanel() {
-    const videoEl = document.getElementById('frontCamVideo');
-    if (videoEl) window.HardwareBridge.stopCameraMonitor(videoEl);
-    document.getElementById('subPanelBackdrop').classList.remove('open');
-  }
+  await speakText(item.en, 'en-US', rate);
+}
 
-  async function scanBleList() {
-    const listEl = document.getElementById('bleDeviceList');
-    listEl.innerHTML = '<div style="color:var(--cyan);">⏳ Đang quét Bluetooth BLE...</div>';
-    const devices = await window.HardwareBridge.scanBleDevices();
-    if (devices.length === 0) {
-      listEl.innerHTML = '<div style="color:var(--text-muted);">Không tìm thấy thiết bị BLE nào. Hãy bật Bluetooth và cấp quyền Vị trí.</div>';
+async function speakText(text, lang = 'en-US', rate = 0.95) {
+  setRobotExpression('speaking');
+  const plugin = Native();
+  if (plugin) {
+    await plugin.speak({ text, lang, rate, pitch: 1.08 });
+  } else if ('speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = rate;
+    u.onend = () => setRobotExpression('idle');
+    window.speechSynthesis.speak(u);
+  }
+}
+
+function stopRobotAudioAndMic() {
+  if (currentAudioPlayer) {
+    try {
+      currentAudioPlayer.pause();
+      currentAudioPlayer = null;
+    } catch (e) {}
+  }
+  const plugin = Native();
+  if (plugin) {
+    plugin.stopSpeak();
+    plugin.stopListening();
+  } else if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  setRobotExpression('idle');
+}
+
+async function startPronounceCheck() {
+  stopRobotAudioAndMic();
+  setRobotExpression('listening');
+  document.getElementById('pronounceFeedback').textContent = '🎙️ Robo đang lắng nghe bé đọc...';
+
+  const plugin = Native();
+  if (plugin) {
+    await plugin.startListening({ lang: 'en-US' });
+  } else {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Chức năng Micro chạy trực tiếp trên bản cài đặt APK Android!');
+      setRobotExpression('idle');
       return;
     }
-    listEl.innerHTML = devices.map(d => `
-      <div class="sentence-row">
-        <span>🔌 <b>${d.name || 'ESP32 Device'}</b> (${d.address})</span>
-        <button class="btn-neon green" onclick="AppController.connectBleDevice('${d.address}', '${(d.name || 'ESP32').replace(/'/g, "\'")}')">Kết nối</button>
-      </div>
-    `).join('');
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.onresult = (e) => onSpeechRecognized(e.results[0][0].transcript);
+    rec.onerror = () => setRobotExpression('idle');
+    rec.start();
   }
+}
 
-  async function connectBleDevice(addr, name) {
-    const ok = await window.HardwareBridge.connectBle(addr, name);
-    showToast(ok ? `✅ Đã kết nối BLE với ${name}` : '❌ Kết nối BLE thất bại');
-    refreshHud();
-  }
+function onSpeechRecognized(spoken) {
+  setRobotExpression('idle');
+  lastChildHeardText = spoken;
+  document.getElementById('btnReplayHeard').disabled = false;
 
-  function saveRobotName() {
-    const val = document.getElementById('inpRobotNameSub').value.trim();
-    if (!val) return;
-    window.RobotStorage.saveSettings({ robotName: val });
-    showToast(`🤖 Đã đổi tên Robot thành "${val}"!`);
-  }
+  const lesson = getActiveLessonItems();
+  const item = lesson.items[activeSentenceIndex] || lesson.items[0];
+  const targetWords = item.en.toLowerCase().replace(/[^a-z0-9'\s]/g, '').split(/\s+/).filter(Boolean);
+  const spokenClean = spoken.toLowerCase().replace(/[^a-z0-9'\s]/g, '');
 
-  function addNewProfile() {
-    const name = prompt('Nhập tên thành viên mới (ví dụ: Bé Bông, Anh Hai):');
-    if (!name || !name.trim()) return;
-    const age = parseInt(prompt('Nhập độ tuổi:', '7') || '7', 10);
-    const list = window.RobotStorage.getProfiles();
-    const id = 'p_' + Date.now();
-    list.push({ id, name: name.trim(), age, stars: 2, mastered: {}, mistakes: {}, studySeconds: 0 });
-    window.RobotStorage.saveProfiles(list);
-    window.RobotStorage.saveSettings({ activeProfileId: id });
-    refreshHud();
-    openSubPanel('profiles');
-  }
+  let matched = 0;
+  const wrongWords = [];
 
-  function selectProfile(id) {
-    window.RobotStorage.saveSettings({ activeProfileId: id });
-    refreshHud();
-    openSubPanel('profiles');
-    showToast('✅ Đã chuyển hồ sơ học tập!');
-  }
-
-  async function toggleCameraPreview(turnOn) {
-    const videoEl = document.getElementById('frontCamVideo');
-    const statusEl = document.getElementById('camStatusText');
-    if (turnOn) {
-      await window.HardwareBridge.startCameraMonitor(videoEl, (msg) => {
-        if (statusEl) statusEl.textContent = msg;
-      });
+  targetWords.forEach((w, idx) => {
+    const el = document.getElementById('kw_' + idx);
+    if (spokenClean.includes(w)) {
+      matched++;
+      if (el) { el.classList.add('ok'); el.classList.remove('miss'); }
     } else {
-      window.HardwareBridge.stopCameraMonitor(videoEl);
-      if (statusEl) statusEl.textContent = 'Camera đã tắt hoàn toàn.';
+      wrongWords.push(w);
+      if (el) { el.classList.add('miss'); el.classList.remove('ok'); }
     }
+  });
+
+  const score = Math.round((matched / Math.max(1, targetWords.length)) * 100);
+  const passed = score >= 80;
+  const fb = document.getElementById('pronounceFeedback');
+
+  // Ghi nhận tiến độ học lên api_user.php
+  logLearningToServer({
+    topic: lesson.slug,
+    sentence_id: item.id ?? activeSentenceIndex,
+    en: item.en,
+    score: score,
+    status: passed ? 'passed' : 'review',
+    wrong_words: wrongWords
+  });
+
+  if (passed) {
+    updateStarsUI(starsCount + 1, true);
+    setRobotExpression('happy');
+    sendEspCommand('M:CLAP');
+    fb.textContent = `🎉 Đạt ${score}%! Máy nghe: "${spoken}" — Thưởng +1 ★!`;
+    speakText('Great job! You earned one star!', 'en-US', 1.0);
+  } else {
+    fb.textContent = `💪 Đạt ${score}% — Máy nghe: "${spoken}". Bé xem phần đánh vần màu vàng rồi thử lại nhé!`;
   }
+}
 
-  // Mini-game Offline dự phòng khi tab Game mất mạng
-  function playOfflineRps(userChoice) {
-    const choices = ['✊ Búa', '✋ Bao', '✌️ Kéo'];
-    const botIdx = Math.floor(Math.random() * 3);
-    const botChoice = choices[botIdx];
-    let result = 'Hòa nhau rồi! 🤝';
-    if ((userChoice === 0 && botIdx === 2) || (userChoice === 1 && botIdx === 0) || (userChoice === 2 && botIdx === 1)) {
-      result = 'Bé thắng rồi! Giỏi quá! 🎉';
-      window.FaceLessonEngine.setEmotion('happy');
-    } else if (userChoice !== botIdx) {
-      result = 'Robo thắng lượt này nhé! 😄';
-    }
-    document.getElementById('offlineRpsResult').innerHTML =
-      `Bé chọn: <b>${choices[userChoice]}</b> vs Robo chọn: <b>${botChoice}</b> → <b>${result}</b>`;
+function replayChildHeard() {
+  if (lastChildHeardText) {
+    speakText(lastChildHeardText, 'en-US', 0.9);
   }
+}
 
-  async function init() {
-    await window.HardwareBridge.init();
-    window.FaceLessonEngine.init();
-
-    const s = window.RobotStorage.getSettings();
-    window.HardwareBridge.setBrightness(s.brightness);
-    window.HardwareBridge.setVolume(s.volume);
-
-    refreshHud();
-    renderNotebookView();
-
-    // Kiểm tra hết hạn giờ thưởng giải trí mỗi giây
-    rewardInterval = setInterval(() => {
-      const cur = window.RobotStorage.getSettings();
-      if (cur.studyOnlyLock && cur.unlockUntilTs > 0 && Date.now() >= cur.unlockUntilTs) {
-        window.RobotStorage.saveSettings({ unlockUntilTs: 0 });
-        refreshHud();
-        if (activeTab === 'youtube' || activeTab === 'game') {
-          switchTab('robot', true);
-          window.FaceLessonEngine.setEmotion('encourage', '⏰ Hết giờ giải trí rồi! Mình quay lại học tiếng Anh tích sao nhé!');
-          window.HardwareBridge.speak('Hết giờ giải trí rồi, mình quay lại học tiếng Anh nhé!', 'vi-VN', 1.0);
+// ============================================================================
+// 6. ĐỒNG BỘ HỒ SƠ & NHẬT KÝ HỌC TẬP VỚI API_USER.PHP
+// ============================================================================
+async function syncProfileAndProgress() {
+  try {
+    await fetch(`${baseServerUrl}/api_user.php?action=sync_profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bot_id: APP_UID,
+        profile: {
+          study_only: studyOnlyMode,
+          parent_pin: parentPin,
+          speech_rate: parseFloat(document.getElementById('ttsSpeedSelect').value || '0.95')
         }
-      } else if (cur.studyOnlyLock && cur.unlockUntilTs > Date.now()) {
-        refreshHud();
-      }
-    }, 1000);
+      })
+    });
+  } catch (e) {}
+}
 
-    window.addEventListener('robot:statusUpdated', refreshHud);
+async function logLearningToServer(record) {
+  try {
+    await fetch(`${baseServerUrl}/api_user.php?action=log_learning`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bot_id: APP_UID,
+        ...record
+      })
+    });
+  } catch (e) {}
+}
+
+async function logUserActivity(type, detail) {
+  try {
+    await fetch(`${baseServerUrl}/api_user.php?action=log_activity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bot_id: APP_UID,
+        type: type,
+        detail: detail
+      })
+    });
+  } catch (e) {}
+}
+
+// ============================================================================
+// 7. TRẠNG THÁI THIẾT BỊ, GHIM CHỐNG THOÁT & CÀI ĐẶT PHỤ HUYNH
+// ============================================================================
+async function refreshDeviceStatus() {
+  const plugin = Native();
+  const pill = document.getElementById('batteryTempPill');
+  const banner = document.getElementById('settingStatusBanner');
+
+  if (!plugin) {
+    banner.textContent = `UID: ${APP_UID} | Chế độ Web | Server: ${baseServerUrl}`;
+    return;
   }
 
-  return {
-    init,
-    showToast,
-    refreshHud,
-    switchTab,
-    reloadCurrentIframe,
-    redeemStarsForPlay,
-    openParentPinFromReward,
-    verifyParentPin,
-    renderNotebookView,
-    selectNotebookTopic,
-    setNotebookFilter,
-    launchSentenceInRobot,
-    toggleLessonOrderMode,
-    syncTopicsFromServer,
-    onBrightnessChange,
-    onVolumeChange,
-    onTtsRateChange,
-    saveServerUrls,
-    resetDefaultServerUrls,
-    toggleSettingBool,
-    changeParentPin,
-    exitKioskManufacturer,
-    openSubPanel,
-    closeSubPanel,
-    scanBleList,
-    connectBleDevice,
-    saveRobotName,
-    addNewProfile,
-    selectProfile,
-    toggleCameraPreview,
-    playOfflineRps
-  };
-})();
+  try {
+    const info = await plugin.getDeviceStatus();
+    const bat = info.battery ?? 80;
+    const temp = Number(info.temperature ?? 36.5).toFixed(1);
+    pill.textContent = `🔋 ${bat}% • ${temp}°C`;
+    pill.classList.toggle('warn', bat < 15 || parseFloat(temp) > 42.0);
 
-window.addEventListener('DOMContentLoaded', () => {
-  window.AppController.init();
-});
+    const ipPart = info.localIp && info.localIp !== '0.0.0.0' ? ` (${info.localIp})` : '';
+    const pinState = info.isPinned ? 'Đã ghim' : 'Chưa ghim';
+    banner.textContent = `UID: ${APP_UID} | Wi-Fi: ${info.wifiSsid}${ipPart} | ${pinState}`;
+  } catch (e) {}
+}
+
+function requestOpenSetting() {
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinModal').classList.add('open');
+}
+
+function verifyPin() {
+  const val = document.getElementById('pinInput').value.trim();
+  if (val === parentPin) {
+    closeModal('pinModal');
+    switchTab('setting');
+  } else {
+    alert('Sai mã PIN phụ huynh! (Mặc định là 1234)');
+  }
+}
+
+function toggleStudyOnly(checked) {
+  studyOnlyMode = checked;
+  localStorage.setItem('robo_study_only', checked ? '1' : '0');
+  syncProfileAndProgress();
+}
+
+async function setAppPinning(enable) {
+  const plugin = Native();
+  if (plugin) {
+    await plugin.setKioskMode({ enabled: enable });
+    refreshDeviceStatus();
+    alert(enable
+      ? 'Đã bật Ghim màn hình chống thoát! (Lưu ý: Cần bật mục "Ghim ứng dụng / Pin windows" trong Cài đặt Bảo mật của điện thoại).'
+      : 'Đã mở khóa Ghim màn hình.');
+  } else {
+    alert('Tính năng Ghim ứng dụng hoạt động trên thiết bị Android.');
+  }
+}
+
+function openChangePinModal() {
+  const np = prompt('Nhập mã PIN 4 số mới cho Phụ huynh:', parentPin);
+  if (np && /^\d{4}$/.test(np)) {
+    parentPin = np;
+    localStorage.setItem('robo_pin', np);
+    syncProfileAndProgress();
+    alert('Đã đổi mã PIN thành công!');
+  } else if (np !== null) {
+    alert('Mã PIN phải gồm đúng 4 chữ số.');
+  }
+}
+
+function onBrightnessChange(val) {
+  document.getElementById('brightnessVal').textContent = val + '%';
+  const plugin = Native();
+  if (plugin) plugin.setBrightness({ level: parseInt(val, 10) });
+}
+
+function onVolumeChange(val) {
+  document.getElementById('volumeVal').textContent = val + '%';
+  const plugin = Native();
+  if (plugin) plugin.setVolume({ level: parseInt(val, 10) });
+}
+
+function saveSettings() {
+  syncProfileAndProgress();
+}
+
+function openAndroidWifi() {
+  const plugin = Native();
+  if (plugin) plugin.openWifiSettings();
+}
+
+function openApiConfigModal() {
+  document.getElementById('apiBaseUrlInput').value = baseServerUrl;
+  document.getElementById('apiModal').classList.add('open');
+}
+
+function saveApiBaseUrl() {
+  const val = document.getElementById('apiBaseUrlInput').value.trim().replace(/\/+$/, '');
+  if (val) {
+    baseServerUrl = val;
+    localStorage.setItem('robo_base_url', baseServerUrl);
+    closeModal('apiModal');
+    refreshDeviceStatus();
+    alert('Đã lưu đường dẫn thư mục Backend!');
+  }
+}
+
+// ============================================================================
+// 8. KẾT NỐI PHẦN CỨNG ESP32 BLE & BIỂU CẢM KHUÔN MẶT
+// ============================================================================
+function openEsp32Modal() {
+  document.getElementById('espModal').classList.add('open');
+}
+
+async function connectEsp32Ble() {
+  const st = document.getElementById('espStatusText');
+  const pill = document.getElementById('bleStatusPill');
+  try {
+    if (!navigator.bluetooth) {
+      st.textContent = 'Thiết bị chưa bật Bluetooth WebView.';
+      return;
+    }
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'ESP32' }, { namePrefix: 'Robot' }],
+      optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+    });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+    bleCharacteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+    await bleCharacteristic.startNotifications();
+    bleCharacteristic.addEventListener('characteristicvaluechanged', (ev) => {
+      const msg = new TextDecoder().decode(ev.target.value).trim();
+      if (msg.startsWith('BTN_')) {
+        const btnNum = parseInt(msg.replace('BTN_', ''), 10);
+        wakeUpRobot();
+        if (currentTab === 'robot') {
+          if (btnNum === 1) startPronounceCheck();
+          if (btnNum === 2) playCurrentSentence();
+          if (btnNum === 3) nextSentence();
+          if (btnNum === 4) switchTab('study');
+        }
+      }
+    });
+    st.textContent = '✅ Đã kết nối với ' + device.name;
+    pill.textContent = '🔌 BLE OK';
+    pill.classList.add('connected');
+  } catch (e) {
+    st.textContent = '⚠️ Chưa ghép nối BLE: ' + e.message;
+  }
+}
+
+async function sendEspCommand(cmd) {
+  if (!bleCharacteristic) return;
+  try {
+    await bleCharacteristic.writeValue(new TextEncoder().encode(cmd + '\n'));
+  } catch (e) {}
+}
+
+function setRobotExpression(expr) {
+  const box = document.getElementById('faceBox');
+  const isDocked = box.classList.contains('docked');
+  box.className = 'face-box' + (isDocked ? ' docked' : '') + (expr && expr !== 'idle' ? ' ' + expr : '');
+}
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (currentTab === 'robot') {
+      isSleeping = true;
+      setRobotExpression('sleep');
+    }
+  }, 60000);
+}
+
+function wakeUpRobot() {
+  if (!isSleeping) return;
+  isSleeping = false;
+  setRobotExpression('happy');
+  setTimeout(() => setRobotExpression('idle'), 1500);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}

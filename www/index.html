@@ -3,436 +3,623 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Robot 2027 Companion V1.4</title>
-  <link rel="stylesheet" href="css/theme_oled.css" />
-  <link rel="stylesheet" href="css/robot_face.css" />
-  <link rel="stylesheet" href="css/views_panels.css" />
+  <title>Robot 2027 Companion V1.4 Pro</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --panel: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --cyan: #38bdf8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --topbar-h: 52px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    input, select { user-select: text; }
+
+    /* ================= THANH HEADER DUY NHẤT (52PX) ================= */
+    .topbar {
+      height: var(--topbar-h);
+      background: #070d19;
+      border-bottom: 1px solid #1e293b;
+      padding: 0 12px 0 46px; /* Chừa lề trái tránh nút trợ năng nổi Android */
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      position: relative;
+      z-index: 100;
+    }
+
+    .status-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .pill {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pill-star { border-color: #854d0e; color: #fde047; }
+    .pill-ble  { border-color: #374151; color: #cbd5e1; cursor: pointer; }
+    .pill-ble.connected { border-color: #16a34a; color: #4ade80; }
+    .pill-bat  { border-color: #14532d; color: #4ade80; }
+    .pill-bat.warn { border-color: #991b1b; color: #fca5a5; }
+
+    /* THANH ICON CHỨC NĂNG BÊN GÓC PHẢI (CO GIÃN ĐỘNG KHI CÓ NÚT REFRESH) */
+    .nav-dock {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 4px 8px;
+      flex-shrink: 0;
+      transition: all 0.22s ease;
+    }
+
+    .nav-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+    }
+
+    .nav-btn:active { transform: scale(0.92); }
+    .nav-btn.active {
+      background: #0c4a6e;
+      border-color: var(--cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+    }
+
+    /* Nút Refresh chỉ xuất hiện ở đầu bên trái thanh icon khi ở YouTube / Game */
+    .nav-btn-refresh {
+      background: #065f46;
+      border-color: #10b981;
+      color: #ecfdf5;
+      animation: popIn 0.2s ease;
+    }
+    .nav-btn-refresh.hidden { display: none; }
+
+    .nav-divider {
+      width: 1px;
+      height: 20px;
+      background: #334155;
+      margin: 0 2px;
+    }
+    .nav-divider.hidden { display: none; }
+
+    @keyframes popIn {
+      from { transform: scale(0.5); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+
+    /* ================= KHUNG NỘI DUNG CHÍNH ================= */
+    .main-stage {
+      width: 100%;
+      height: calc(100vh - var(--topbar-h));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tab-pane {
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 14px 18px 14px 48px;
+    }
+    .tab-pane.active { display: block; }
+
+    /* Tab Iframe tràn viền tuyệt đối (không padding, không sub-header) */
+    .tab-pane.iframe-pane {
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    .tab-pane.iframe-pane iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #0b1120;
+    }
+
+    /* ================= TAB 1: SỔ HỌC TẬP (32 CHỦ ĐỀ) ================= */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .section-head h2 { font-size: 17px; color: var(--cyan); }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary { background: #0284c7; border-color: #38bdf8; }
+    .btn-green   { background: #15803d; border-color: #22c55e; }
+    .btn-amber   { background: #b45309; border-color: #f59e0b; }
+    .btn-red     { background: #b91c1c; border-color: #ef4444; }
+
+    .topics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .topic-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 13px;
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .topic-card:hover, .topic-card.selected { border-color: var(--cyan); background: #132238; }
+    .topic-card .t-title { font-size: 14px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; }
+    .topic-card .t-meta  { font-size: 11px; color: var(--muted); }
+
+    /* ================= TAB 2: KHUÔN MẶT ROBOT & KARAOKE ================= */
+    .robot-layout {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .face-box {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      transition: all 0.3s ease;
+    }
+    .face-box.docked { flex: 0 0 auto; padding-top: 4px; gap: 8px; }
+
+    .eyes-row { display: flex; gap: 68px; align-items: center; transition: gap 0.3s ease; }
+    .face-box.docked .eyes-row { gap: 36px; }
+
+    .eye {
+      width: 74px;
+      height: 74px;
+      border-radius: 22px;
+      background: radial-gradient(circle at 35% 35%, #7dd3fc, #0284c7);
+      box-shadow: 0 0 28px rgba(56, 189, 248, 0.7);
+      position: relative;
+      transition: all 0.25s ease;
+      animation: blink 4.5s infinite;
+    }
+    .face-box.docked .eye { width: 42px; height: 42px; border-radius: 13px; }
+
+    .face-box.happy .eye {
+      border-radius: 50% 50% 14px 14px;
+      background: radial-gradient(circle, #86efac, #16a34a);
+      box-shadow: 0 0 28px rgba(34, 197, 94, 0.75);
+    }
+    .face-box.listening .eye {
+      background: radial-gradient(circle, #fde047, #d97706);
+      box-shadow: 0 0 30px rgba(245, 158, 11, 0.8);
+      transform: scale(1.08);
+    }
+    .face-box.sleep .eye {
+      height: 8px;
+      border-radius: 4px;
+      background: #475569;
+      box-shadow: none;
+      animation: none;
+    }
+
+    @keyframes blink {
+      0%, 94%, 100% { transform: scaleY(1); }
+      97% { transform: scaleY(0.08); }
+    }
+
+    .mouth {
+      width: 58px;
+      height: 16px;
+      border-radius: 0 0 28px 28px;
+      border-bottom: 5px solid var(--cyan);
+      transition: all 0.2s ease;
+    }
+    .face-box.speaking .mouth {
+      height: 26px;
+      border: 4px solid var(--cyan);
+      border-radius: 18px;
+      animation: talk 0.28s infinite alternate;
+    }
+    .face-box.happy .mouth {
+      width: 72px;
+      height: 26px;
+      border-bottom: 6px solid #4ade80;
+    }
+    .face-box.sleep .mouth {
+      width: 24px;
+      height: 12px;
+      border: 3px solid #64748b;
+      border-radius: 50%;
+    }
+    @keyframes talk {
+      from { transform: scaleY(0.55); }
+      to   { transform: scaleY(1.15); }
+    }
+
+    /* BẢNG KARAOKE HỌC TIẾNG ANH */
+    .karaoke-card {
+      width: 100%;
+      max-width: 860px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .k-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--cyan);
+      font-weight: 700;
+    }
+    .k-en {
+      font-size: 21px;
+      font-weight: 800;
+      line-height: 1.35;
+      color: #f8fafc;
+    }
+    .k-en .word { padding: 1px 4px; border-radius: 6px; transition: background 0.15s; }
+    .k-en .word.active { background: #0284c7; color: #fff; }
+    .k-en .word.ok     { color: #4ade80; }
+    .k-en .word.miss   { color: #f87171; text-decoration: underline; }
+
+    .k-spell { font-size: 12px; color: #fbbf24; font-family: monospace; }
+    .k-vi    { font-size: 14px; color: #cbd5e1; }
+    .k-fb    { font-size: 13px; color: #38bdf8; font-weight: 600; }
+
+    .k-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 2px;
+    }
+    .k-btn-group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    /* ================= TAB SETTING & HƯỚNG DẪN ================= */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    .set-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .set-card h3 { font-size: 14px; color: var(--cyan); }
+    .set-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .status-banner {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 12px;
+      color: #e2e8f0;
+      margin-bottom: 12px;
+      font-family: monospace;
+    }
+
+    /* ================= MODAL CHUNG ================= */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      width: 100%;
+      max-width: 440px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-input {
+      width: 100%;
+      background: #020617;
+      border: 1px solid #475569;
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
 
-  <!-- Thanh thông số góc trên bên trái -->
-  <div class="top-left-hud">
-    <div class="hud-pill star" id="hudProfile" onclick="AppController.switchTab('setting')">👤 Bé Bi • ★ 3</div>
-    <div class="hud-pill" id="hudBle">🔌 BLE Chờ</div>
-    <div class="hud-pill" id="hudBattery">🔋 85% • 36.5°C</div>
-    <div class="hud-pill timer" id="hudRewardTimer" style="display:none;">⏳ 10:00</div>
-  </div>
-
-  <!-- Thanh 6 Icon Cố Định Góc Trên Bên Phải -->
-  <nav class="top-right-nav" aria-label="Điều hướng Robot 2027">
-    <button class="nav-icon-btn" id="nav-notebook" title="Sổ Học Tập (32 Chủ đề)" onclick="AppController.switchTab('notebook')">📖</button>
-    <button class="nav-icon-btn active" id="nav-robot" title="Màn Hình Robot Chính" onclick="AppController.switchTab('robot')">🤖</button>
-    <button class="nav-icon-btn locked" id="nav-youtube" title="YouTube Thiếu Nhi" onclick="AppController.switchTab('youtube')">
-      ▶️<span class="lock-badge">🔒</span>
-    </button>
-    <button class="nav-icon-btn locked" id="nav-game" title="Trò Chơi Tương Tác" onclick="AppController.switchTab('game')">
-      🎮<span class="lock-badge">🔒</span>
-    </button>
-    <button class="nav-icon-btn" id="nav-setting" title="Cài Đặt Hệ Thống" onclick="AppController.switchTab('setting')">⚙️</button>
-    <button class="nav-icon-btn" id="nav-guide" title="Hướng Dẫn Sử Dụng" onclick="AppController.switchTab('guide')">❗</button>
-  </nav>
-
-  <!-- =========================================================
-       MÀN HÌNH 1: SỔ HỌC TẬP (32 CHỦ ĐỀ + OFFLINE + SERVER SYNC)
-  ========================================================= -->
-  <section id="view-notebook" class="app-view">
-    <div class="panel-header">
-      <div class="panel-title">📖 Sổ Học Tập Tiếng Anh (32 Chủ Đề & Offline)</div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn-neon" id="btnLessonModeToggle" onclick="AppController.toggleLessonOrderMode()">🔢 Chế độ: Thứ tự</button>
-        <button class="btn-neon green" onclick="AppController.syncTopicsFromServer()">🔄 Đồng bộ 32 gói Server</button>
-      </div>
+  <!-- THANH HEADER DUY NHẤT -->
+  <header class="topbar">
+    <div class="status-pills">
+      <span class="pill pill-star" id="profileStarPill">👤 Bé Bi • ★ 0</span>
+      <span class="pill pill-ble" id="bleStatusPill" onclick="openEsp32Modal()">🔌 BLE Chờ</span>
+      <span class="pill pill-bat" id="batteryTempPill">🔋 --% • --°C</span>
     </div>
-    <div class="panel-body">
-      <div class="notebook-toolbar">
-        <input type="text" id="topicSearchInput" class="search-box" placeholder="🔍 Tìm chủ đề (ví dụ: Animals, Family, Space...)" oninput="AppController.renderNotebookView()" />
-        <button class="btn-neon gray" onclick="AppController.setNotebookFilter('all')">Tất cả câu</button>
-        <button class="btn-neon green" onclick="AppController.setNotebookFilter('mastered')">✅ Đã thuộc</button>
-        <button class="btn-neon amber" onclick="AppController.setNotebookFilter('review')">⚠️ Cần ôn tập</button>
-      </div>
 
-      <div id="topicsGrid" class="topics-grid"></div>
+    <!-- THANH ICON ĐIỀU HƯỚNG (TỰ CO THÊM NÚT REFRESH Ở ĐẦU BÊN TRÁI KHI Ở YOUTUBE / GAME) -->
+    <nav class="nav-dock" id="navDock">
+      <button type="button" class="nav-btn nav-btn-refresh hidden" id="btnRefreshIframe" onclick="refreshActiveIframe()" title="Tải lại trang">🔄</button>
+      <span class="nav-divider hidden" id="navRefreshDivider"></span>
 
-      <h4 id="selectedTopicHeader" style="color:var(--cyan);margin-bottom:8px;font-size:14px;">📘 Danh sách câu mẫu</h4>
-      <div id="sentencesList" class="sentences-list"></div>
-    </div>
-  </section>
+      <button type="button" class="nav-btn" data-tab="study" onclick="switchTab('study')" title="Sổ học 32 chủ đề">📖</button>
+      <button type="button" class="nav-btn active" data-tab="robot" onclick="switchTab('robot')" title="Mặt Robot học tiếng Anh">🤖</button>
+      <button type="button" class="nav-btn" data-tab="youtube" onclick="switchTab('youtube')" title="Xem YouTube">▶️</button>
+      <button type="button" class="nav-btn" data-tab="game" onclick="switchTab('game')" title="Khu vui chơi Game">🎮</button>
+      <button type="button" class="nav-btn" data-tab="setting" onclick="requestOpenSetting()" title="Cài đặt Phụ huynh">⚙️</button>
+      <button type="button" class="nav-btn" data-tab="guide" onclick="switchTab('guide')" title="Hướng dẫn sử dụng">❗</button>
+    </nav>
+  </header>
 
-  <!-- =========================================================
-       MÀN HÌNH 2: ROBOT CHÍNH DIỆN (MẮT - MŨI - MIỆNG + KARAOKE)
-  ========================================================= -->
-  <section id="view-robot" class="app-view active" onclick="FaceLessonEngine.resetIdleTimer()">
-    <div id="robotStage" class="robot-stage">
-      <!-- Khuôn mặt Robot OLED -->
-      <div class="face-container" onclick="FaceLessonEngine.playCurrentSentence(false)">
-        <div class="eyes-pair">
-          <div class="r-eye" id="eyeLeft"></div>
-          <div class="r-eye" id="eyeRight"></div>
-        </div>
-        <div class="r-nose"></div>
-        <div class="r-mouth" id="robotMouth"></div>
-        <div class="face-caption" id="faceCaption">Chạm vào mặt Robot để nghe mẫu hoặc bấm nút bên dưới để bắt đầu học!</div>
-      </div>
+  <!-- VÙNG HIỂN THỊ CHÍNH -->
+  <main class="main-stage">
 
-      <!-- Nút mở nhanh Bảng Học Karaoke khi đang ở màn hình mặt đầy đủ -->
-      <div id="quickStartBar" style="display:flex;gap:10px;margin-top:16px;">
-        <button class="btn-neon green" onclick="FaceLessonEngine.startTopic('greetings', 0)">🎓 Bắt đầu Học Tiếng Anh Karaoke</button>
-        <button class="btn-neon" onclick="AppController.switchTab('notebook')">📖 Chọn Chủ Đề</button>
-      </div>
-
-      <!-- Bảng Học Karaoke toàn chiều ngang (Tự mở khi học, ẩn miệng nhường chỗ cho chữ) -->
-      <div class="karaoke-board" id="karaokeBoard">
-        <div class="lesson-meta-bar">
-          <span id="lessonTopicLabel">👋 Chào Hỏi • Câu 1/5</span>
-          <span id="lessonAttemptLabel">Lần thử: 0/3</span>
-          <button class="btn-neon gray" style="padding:3px 9px;font-size:11px;" onclick="FaceLessonEngine.closeLessonBoard()">Thu gọn bảng chữ ✕</button>
-        </div>
-
-        <div class="karaoke-sentence" id="karaokeWords"></div>
-        <div class="spelling-strip" id="spellingStrip">💡 Chạm vào từng từ ở trên để nghe đánh vần!</div>
-        <div class="vi-translation" id="viTranslation" onclick="FaceLessonEngine.toggleVietnameseHint()">🇻🇳 Xin chào! Hôm nay bạn khỏe không?</div>
-        <div class="speech-feedback" id="speechFeedback">🎙️ Bấm "Đọc luyện phát âm" và đọc to câu tiếng Anh trên nhé!</div>
-
-        <div class="lesson-controls">
-          <button class="btn-neon" onclick="FaceLessonEngine.playCurrentSentence(false)">🔊 Nghe lại</button>
-          <button class="btn-neon" onclick="FaceLessonEngine.playCurrentSentence(true)">🐢 Đọc chậm</button>
-          <button class="btn-neon green" onclick="FaceLessonEngine.startPronunciationPractice()">🎙️ Đọc luyện phát âm</button>
-          <button class="btn-neon gray" id="btnReplayKidVoice" disabled onclick="FaceLessonEngine.replayKidVoice()">🎧 Nghe giọng bé</button>
-          <button class="btn-neon amber" onclick="FaceLessonEngine.spellWholeSentence()">🔤 Đánh vần cả câu</button>
-          <button class="btn-neon gray" onclick="FaceLessonEngine.toggleVietnameseHint()">🇻🇳 Ẩn/Hiện nghĩa</button>
-          <button class="btn-neon" id="btnSkipSentence" disabled onclick="FaceLessonEngine.nextSentence()">⏭️ Qua câu</button>
+    <!-- TAB 1: SỔ HỌC TẬP (32 CHỦ ĐỀ TỪ API.PHP) -->
+    <section class="tab-pane" id="tab-study">
+      <div class="section-head">
+        <h2>📖 Sổ Học Tiếng Anh (<span id="topicsCountLabel">32</span> Chủ Đề)</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" onclick="syncStudyPacks(true)">🔄 Đồng bộ Server</button>
         </div>
       </div>
-    </div>
+      <div class="topics-grid" id="topicsGrid"></div>
+    </section>
 
-    <!-- Mô phỏng / Hiển thị trạng thái 4 nút bấm vật lý trên thân ESP32 -->
-    <div class="hw-buttons-bar" title="4 Nút bấm vật lý trên thân Robot (ESP32)">
-      <button class="hw-dot-btn" onclick="FaceLessonEngine.playCurrentSentence(false)"><span class="hw-dot" style="background:#ef4444;"></span>Nút 1: Nghe</button>
-      <button class="hw-dot-btn" onclick="FaceLessonEngine.toggleVietnameseHint()"><span class="hw-dot" style="background:#22c55e;"></span>Nút 2: Dịch</button>
-      <button class="hw-dot-btn" onclick="FaceLessonEngine.nextSentence()"><span class="hw-dot" style="background:#eab308;"></span>Nút 3: Qua câu</button>
-      <button class="hw-dot-btn" onclick="AppController.switchTab('game')"><span class="hw-dot" style="background:#38bdf8;"></span>Nút 4: Game</button>
-    </div>
-  </section>
+    <!-- TAB 2: ROBOT HỌC TIẾNG ANH & KARAOKE -->
+    <section class="tab-pane active" id="tab-robot">
+      <div class="robot-layout">
+        <div class="face-box" id="faceBox" onclick="toggleDockEyes()">
+          <div class="eyes-row">
+            <div class="eye"></div>
+            <div class="eye"></div>
+          </div>
+          <div class="mouth"></div>
+        </div>
 
-  <!-- Màn hình Ngủ Giả Đen Tuyền (Chạm để đánh thức) -->
-  <div id="sleepOverlay" class="sleep-overlay" onclick="FaceLessonEngine.wakeUp(true)">
-    <div class="sleep-eyes">
-      <div class="sleep-line"></div>
-      <div class="sleep-line"></div>
-    </div>
-    <div style="color:#475569;font-size:13px;">Zzz... Chạm bất kỳ đâu trên màn hình để đánh thức Robot</div>
-  </div>
+        <div class="karaoke-card">
+          <div class="k-top">
+            <span id="lessonTopicBadge">Chủ đề 1 (1/3)</span>
+            <span style="cursor:pointer;" onclick="toggleDockEyes()">👁️ Thu/Phóng mắt</span>
+          </div>
+          <div class="k-en" id="karaokeEn">Hello! My name is Robo.</div>
+          <div class="k-spell" id="karaokeSpell">HELLO: H-E-L-L-O | MY: M-Y | NAME: N-A-M-E | IS: I-S | ROBO: R-O-B-O</div>
+          <div class="k-vi" id="karaokeVi">Xin chào! Tên mình là Robo.</div>
+          <div class="k-fb" id="pronounceFeedback">Bấm "Bé đọc" để luyện phát âm nhận sao ★!</div>
 
-  <!-- =========================================================
-       MÀN HÌNH 3: YOUTUBE IFRAME (LOAD TỪ SERVER)
-  ========================================================= -->
-  <section id="view-youtube" class="app-view">
-    <div class="iframe-toolbar">
-      <div class="panel-title" style="font-size:14px;">
-        ▶️ YouTube Thiếu Nhi • <span id="youtubeUrlLabel" style="font-size:11.5px;color:var(--text-muted);font-weight:400;">https://khotrithucso.io.vn/robot2027_2_4/test1/youtube.php</span>
+          <div class="k-actions">
+            <div class="k-btn-group">
+              <button type="button" class="btn" onclick="prevSentence()">⏮️ Trước</button>
+              <button type="button" class="btn btn-primary" onclick="playCurrentSentence()">🔊 Nghe mẫu</button>
+              <button type="button" class="btn btn-green" onclick="startPronounceCheck()">🎙️ Bé đọc</button>
+              <button type="button" class="btn" id="btnReplayHeard" onclick="replayChildHeard()" disabled>👂 Nghe lại</button>
+              <button type="button" class="btn" onclick="nextSentence()">⏭️ Tiếp</button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn-neon" style="padding:5px 10px;font-size:12px;" onclick="AppController.reloadCurrentIframe('youtube')">🔄 Tải lại</button>
-        <button class="btn-neon green" style="padding:5px 10px;font-size:12px;" onclick="AppController.switchTab('robot')">🤖 Về học bài</button>
-      </div>
-    </div>
-    <div class="iframe-wrapper">
+    </section>
+
+    <!-- TAB 3: YOUTUBE TRÀN VIỀN -->
+    <section class="tab-pane iframe-pane" id="tab-youtube">
       <iframe
-        id="youtubeIframe"
-        class="remote-frame"
+        id="ytFrame"
         src="about:blank"
-        allow="autoplay; fullscreen; encrypted-media; microphone; picture-in-picture"
-        allowfullscreen>
-      </iframe>
-    </div>
-  </section>
+        allow="autoplay; fullscreen; encrypted-media; microphone"
+      ></iframe>
+    </section>
 
-  <!-- =========================================================
-       MÀN HÌNH 4: GAME IFRAME (LOAD TỪ SERVER + DỰ PHÒNG OFFLINE)
-  ========================================================= -->
-  <section id="view-game" class="app-view">
-    <div class="iframe-toolbar">
-      <div class="panel-title" style="font-size:14px;">
-        🎮 Khu Vui Chơi Game • <span id="gamesUrlLabel" style="font-size:11.5px;color:var(--text-muted);font-weight:400;">https://khotrithucso.io.vn/robot2027_2_4/test1/games.php</span>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn-neon amber" style="padding:5px 10px;font-size:12px;" onclick="document.getElementById('offlineGameBox').classList.toggle('show')">🕹️ Game Offline</button>
-        <button class="btn-neon" style="padding:5px 10px;font-size:12px;" onclick="AppController.reloadCurrentIframe('game')">🔄 Tải lại</button>
-        <button class="btn-neon green" style="padding:5px 10px;font-size:12px;" onclick="AppController.switchTab('robot')">🤖 Về Robot</button>
-      </div>
-    </div>
-    <div class="iframe-wrapper">
+    <!-- TAB 4: GAME TRÀN VIỀN -->
+    <section class="tab-pane iframe-pane" id="tab-game">
       <iframe
-        id="gamesIframe"
-        class="remote-frame"
+        id="gameFrame"
         src="about:blank"
-        allow="autoplay; fullscreen; encrypted-media; microphone; gamepad"
-        allowfullscreen>
-      </iframe>
+        allow="autoplay; fullscreen; encrypted-media; microphone"
+      ></iframe>
+    </section>
 
-      <!-- Trò chơi Oẳn Tù Tì Offline dự phòng khi mất Internet -->
-      <div id="offlineGameBox" class="offline-game-fallback">
-        <h3 style="color:var(--cyan);">✊✋✌️ Oẳn Tù Tì Với Robot (Chế độ Offline)</h3>
-        <p style="font-size:13px;color:var(--text-muted);">Dùng khi thiết bị chưa có mạng Internet hoặc bấm nút 🕹️ Game Offline để ẩn/hiện.</p>
-        <div style="display:flex;gap:14px;">
-          <button class="btn-neon" style="font-size:18px;padding:12px 20px;" onclick="AppController.playOfflineRps(0)">✊ Búa</button>
-          <button class="btn-neon" style="font-size:18px;padding:12px 20px;" onclick="AppController.playOfflineRps(1)">✋ Bao</button>
-          <button class="btn-neon" style="font-size:18px;padding:12px 20px;" onclick="AppController.playOfflineRps(2)">✌️ Kéo</button>
-        </div>
-        <div id="offlineRpsResult" style="font-size:15px;color:#fde68a;margin-top:6px;">Chọn Búa, Bao hoặc Kéo để thi đấu với Robo!</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- =========================================================
-       MÀN HÌNH 5: SETTING HỆ THỐNG ĐẦY ĐỦ 8 MỤC (KHÔI PHỤC TỪ V1.3)
-  ========================================================= -->
-  <section id="view-setting" class="app-view">
-    <div class="panel-header">
-      <div class="panel-title">⚙️ Trung Tâm Cài Đặt & Điều Khiển Phần Cứng V1.4</div>
-      <button class="btn-neon green" style="padding:6px 12px;" onclick="AppController.switchTab('robot')">💾 Xong & Về Robot</button>
-    </div>
-    <div class="panel-body">
-      <!-- Dòng thông số Pin / Nhiệt độ / Wi-Fi / IP nội bộ -->
-      <div id="settingTelemetryBar" class="setting-telemetry">
-        <span>🤖 Bot ID: <b>BOT_LOADING</b></span>
-        <span>📶 Wi-Fi: <b>Đang kiểm tra...</b></span>
-        <span>🔋 Pin: <b>--%</b></span>
-        <span>🌡️ Nhiệt độ: <b>--°C</b></span>
-      </div>
+    <!-- TAB 5: CÀI ĐẶT PHỤ HUYNH -->
+    <section class="tab-pane" id="tab-setting">
+      <div class="status-banner" id="settingStatusBanner">Đang tải thông tin thiết bị & UID...</div>
 
       <div class="settings-grid">
-        <!-- Thẻ 1: Màn Hình & Âm Thanh Thật -->
         <div class="set-card">
-          <div class="set-card-title">🔆 Màn Hình & Âm Thanh Thật</div>
-          <div class="slider-row">
-            <span>Độ sáng:</span>
-            <input type="range" id="sliderBrightness" min="5" max="100" value="75" oninput="AppController.onBrightnessChange(this.value)" />
-            <b id="valBrightness">75%</b>
+          <h3>🔒 Kiểm Soát Phụ Huynh & Ghim Màn Hình</h3>
+          <div class="set-row">
+            <span>Chế độ Chỉ Học Tập (Khóa YouTube & Game)</span>
+            <input type="checkbox" id="chkStudyOnly" onchange="toggleStudyOnly(this.checked)" style="width:20px; height:20px;">
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn-neon gray" style="padding:4px 8px;font-size:11px;" onclick="AppController.onBrightnessChange(75);document.getElementById('sliderBrightness').value=75;">Học (75%)</button>
-            <button class="btn-neon gray" style="padding:4px 8px;font-size:11px;" onclick="AppController.onBrightnessChange(30);document.getElementById('sliderBrightness').value=30;">Đêm (30%)</button>
-            <button class="btn-neon gray" style="padding:4px 8px;font-size:11px;" onclick="AppController.onBrightnessChange(5);document.getElementById('sliderBrightness').value=5;">Ngủ (5%)</button>
+          <div class="set-row">
+            <span>Ghim ứng dụng chống thoát App</span>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-green" onclick="setAppPinning(true)">📌 Ghim</button>
+              <button type="button" class="btn btn-red" onclick="setAppPinning(false)">🔓 Mở ghim</button>
+            </div>
           </div>
-          <div class="slider-row">
-            <span>Âm lượng:</span>
-            <input type="range" id="sliderVolume" min="0" max="100" value="85" oninput="AppController.onVolumeChange(this.value)" />
-            <b id="valVolume">85%</b>
-          </div>
-          <div class="slider-row">
-            <span>Tốc độ đọc:</span>
-            <input type="range" id="sliderTtsRate" min="65" max="125" value="92" oninput="AppController.onTtsRateChange(this.value)" />
-            <b id="valTtsRate">0.92x</b>
+          <div class="set-row">
+            <span>Đổi mã PIN Phụ huynh (4 số)</span>
+            <button type="button" class="btn" onclick="openChangePinModal()">🔑 Đổi PIN</button>
           </div>
         </div>
 
-        <!-- Thẻ 2: Kết Nối Mạng Wi-Fi & Server API -->
         <div class="set-card">
-          <div class="set-card-title">
-            <span>🌐 Kết Nối Mạng & Server API</span>
-            <button class="btn-neon" style="padding:4px 9px;font-size:11.5px;" onclick="HardwareBridge.openWifiSettings()">📶 Mở Wi-Fi Android</button>
+          <h3>🔊 Màn Hình, Âm Thanh & Giọng Đọc</h3>
+          <div class="set-row">
+            <span>Độ sáng (<b id="brightnessVal">75%</b>)</span>
+            <input type="range" min="10" max="100" value="75" oninput="onBrightnessChange(this.value)">
           </div>
-          <div style="font-size:11.5px;color:var(--text-muted);">URL API Học Liệu (api.php):</div>
-          <input type="text" id="inpApiUrl" class="input-field" />
-          <div style="font-size:11.5px;color:var(--text-muted);">URL Iframe YouTube:</div>
-          <input type="text" id="inpYoutubeUrl" class="input-field" />
-          <div style="font-size:11.5px;color:var(--text-muted);">URL Iframe Game:</div>
-          <input type="text" id="inpGamesUrl" class="input-field" />
-          <div style="display:flex;gap:8px;">
-            <button class="btn-neon green" style="flex:1;" onclick="AppController.saveServerUrls()">💾 Lưu URL</button>
-            <button class="btn-neon gray" onclick="AppController.resetDefaultServerUrls()">Mặc định</button>
+          <div class="set-row">
+            <span>Âm lượng (<b id="volumeVal">85%</b>)</span>
+            <input type="range" min="0" max="100" value="85" oninput="onVolumeChange(this.value)">
+          </div>
+          <div class="set-row">
+            <span>Tốc độ đọc mẫu TTS</span>
+            <select id="ttsSpeedSelect" class="modal-input" style="width:auto; padding:5px 8px;" onchange="saveSettings()">
+              <option value="0.75">Chậm (0.75x)</option>
+              <option value="0.95" selected>Chuẩn (0.95x)</option>
+              <option value="1.10">Nhanh (1.10x)</option>
+            </select>
           </div>
         </div>
 
-        <!-- Thẻ 3: Kết Nối Phần Cứng ESP32 (BLE) & Sạc Pin -->
         <div class="set-card">
-          <div class="set-card-title">🔌 Phần Cứng ESP32 (BLE) & Pin</div>
-          <div class="switch-row">
-            <span>Đồng bộ cử động Servo (NOD/WAVE):</span>
-            <input type="checkbox" id="chkBleSync" checked onchange="AppController.toggleSettingBool('bleSyncEnabled', this.checked)" />
+          <h3>🌐 Máy Chủ Backend & Phần Cứng ESP32</h3>
+          <div class="set-row">
+            <span>Thư mục Server API</span>
+            <button type="button" class="btn btn-primary" onclick="openApiConfigModal()">⚙️ Cấu Hình URL</button>
           </div>
-          <div class="switch-row">
-            <span>Bảo vệ pin thông minh (50% – 90%):</span>
-            <input type="checkbox" id="chkAutoCharge" checked onchange="AppController.toggleSettingBool('autoChargeGuard', this.checked)" />
+          <div class="set-row">
+            <span>Kết nối Bluetooth ESP32</span>
+            <button type="button" class="btn btn-amber" onclick="openEsp32Modal()">🔌 Kết nối BLE</button>
           </div>
-          <div class="switch-row">
-            <span>Cảnh báo cảm biến nghiêng/ngã:</span>
-            <input type="checkbox" id="chkTiltAlert" checked onchange="AppController.toggleSettingBool('tiltAlert', this.checked)" />
+          <div class="set-row">
+            <span>Mạng Wi-Fi Android</span>
+            <button type="button" class="btn" onclick="openAndroidWifi()">📶 Mở Wi-Fi</button>
           </div>
-          <button class="btn-neon" onclick="AppController.openSubPanel('ble')">📡 Mở Bảng Quét & Test ESP32 BLE</button>
-        </div>
-
-        <!-- Thẻ 4: Kiểm Soát Phụ Huynh & Giờ Đi Ngủ -->
-        <div class="set-card">
-          <div class="set-card-title">👨‍👩‍👧 Kiểm Soát Phụ Huynh & Giờ Ngủ</div>
-          <div class="switch-row">
-            <span>🔒 Chế độ Chỉ Học Tập (Khóa YT/Game):</span>
-            <input type="checkbox" id="chkStudyOnly" checked onchange="AppController.toggleSettingBool('studyOnlyLock', this.checked)" />
-          </div>
-          <div class="switch-row">
-            <span>🔑 Yêu cầu PIN 4 số khi mở Setting:</span>
-            <input type="checkbox" id="chkRequirePin" checked onchange="AppController.toggleSettingBool('requirePinForSetting', this.checked)" />
-          </div>
-          <div class="switch-row">
-            <span>🌙 Hẹn giờ đi ngủ (Bedtime):</span>
-            <input type="checkbox" id="chkBedtime" onchange="AppController.toggleSettingBool('bedtimeEnabled', this.checked)" />
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="time" id="inpBedStart" class="input-field" value="21:30" />
-            <span>→</span>
-            <input type="time" id="inpBedEnd" class="input-field" value="06:30" />
-            <button class="btn-neon amber" style="white-space:nowrap;" onclick="AppController.changeParentPin()">Đổi PIN</button>
-          </div>
-        </div>
-
-        <!-- Thẻ 5: Nhật Ký Học Tập Phụ Huynh -->
-        <div class="set-card">
-          <div class="set-card-title">📊 Nhật Ký & Báo Cáo Học Tập</div>
-          <p style="font-size:12.5px;color:var(--text-muted);line-height:1.4;">
-            Xem tổng thời gian bé học trong ngày, số câu đã thuộc, tổng sao thưởng và danh sách các từ tiếng Anh bé phát âm còn sai nhiều.
-          </p>
-          <button class="btn-neon green" onclick="AppController.openSubPanel('report')">📋 Xem Báo Cáo Học Tập Chi Tiết</button>
-        </div>
-
-        <!-- Thẻ 6: Cá Nhân Hóa & Hồ Sơ Người Dùng -->
-        <div class="set-card">
-          <div class="set-card-title">👤 Cá Nhân Hóa & Hồ Sơ Gia Đình</div>
-          <p style="font-size:12.5px;color:var(--text-muted);line-height:1.4;">
-            Đổi tên gọi của Robot (để đánh thức bằng giọng nói) và chuyển đổi hồ sơ riêng biệt cho từng thành viên trong gia đình.
-          </p>
-          <button class="btn-neon" onclick="AppController.openSubPanel('profiles')">👨‍👩‍👧‍👦 Quản Lý Tên Robot & Hồ Sơ</button>
-        </div>
-
-        <!-- Thẻ 7: Giám Sát Camera Từ Xa (WebRTC P2P) -->
-        <div class="set-card">
-          <div class="set-card-title">📹 Camera Giám Sát Từ Xa (P2P)</div>
-          <p style="font-size:12.5px;color:var(--text-muted);line-height:1.4;">
-            Tận dụng camera trước của robot truyền trực tiếp về điện thoại phụ huynh qua WebRTC ngang hàng (không tốn băng thông hosting).
-          </p>
-          <button class="btn-neon" onclick="AppController.openSubPanel('camera')">📷 Mở Trình Quản Lý Camera Trước</button>
-        </div>
-
-        <!-- Thẻ 8: Kiểm Tra Phần Cứng & Bảo Mật Kiosk -->
-        <div class="set-card">
-          <div class="set-card-title">🧪 Kiểm Tra Phần Cứng & Kiosk</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn-neon gray" style="flex:1;padding:6px 8px;font-size:12px;" onclick="HardwareBridge.speak('Speaker test OK! One, two, three.', 'en-US', 1.0)">🔊 Test Loa</button>
-            <button class="btn-neon gray" style="flex:1;padding:6px 8px;font-size:12px;" onclick="FaceLessonEngine.startPronunciationPractice()">🎙️ Test Mic</button>
-            <button class="btn-neon gray" style="flex:1;padding:6px 8px;font-size:12px;" onclick="AppController.openSubPanel('camera')">📷 Test Cam</button>
-          </div>
-          <div class="switch-row">
-            <span>🛡️ Bật chống vuốt toàn màn hình (Kiosk):</span>
-            <input type="checkbox" id="chkDevAntiSwipe" checked onchange="AppController.toggleSettingBool('devAntiSwipe', this.checked)" />
-          </div>
-          <button class="btn-neon rose" onclick="AppController.exitKioskManufacturer()">🚪 Thoát Kiosk Android (PIN 6 số)</button>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- =========================================================
-       MÀN HÌNH 6: HƯỚNG DẪN SỬ DỤNG TRỰC QUAN
-  ========================================================= -->
-  <section id="view-guide" class="app-view">
-    <div class="panel-header">
-      <div class="panel-title">❗ Hướng Dẫn Sử Dụng Robot 2027 V1.4</div>
-      <button class="btn-neon green" onclick="AppController.switchTab('robot')">🤖 Bắt đầu ngay</button>
-    </div>
-    <div class="panel-body">
-      <div class="guide-grid">
-        <div class="guide-card">
-          <h4>1. Ý Nghĩa 6 Biểu Tượng Góc Trên Bên Phải</h4>
-          <p>
-            • <b>📖 Sổ Học Tập:</b> Chọn 32 chủ đề tiếng Anh & đồng bộ dữ liệu Offline.<br>
-            • <b>🤖 Robot:</b> Khuôn mặt cảm xúc & bảng luyện đọc Karaoke.<br>
-            • <b>▶️ YouTube:</b> Xem video thiếu nhi từ máy chủ.<br>
-            • <b>🎮 Game:</b> Chơi trò chơi tương tác từ máy chủ.<br>
-            • <b>⚙️ Setting:</b> Chỉnh sáng, loa, Wi-Fi, BLE & khóa phụ huynh.<br>
-            • <b>❗ Hướng Dẫn:</b> Xem chỉ dẫn sử dụng nhanh.
-          </p>
-        </div>
-        <div class="guide-card">
-          <h4>2. Luyện Phát Âm Karaoke & Đánh Vần</h4>
-          <p>
-            • Khi học, từng từ tiếng Anh sáng lên theo nhịp đọc.<br>
-            • <b>Chạm vào bất kỳ từ nào</b> trên màn hình để nghe Robot đánh vần từng chữ cái (ví dụ: <i>R - A - B - B - I - T</i>).<br>
-            • Bấm <b>🎙️ Đọc luyện phát âm</b>: từ đúng tô màu xanh lá, từ sai tô màu đỏ. Đạt ≥ 75% nhận ngay <b>+1 ★</b>!
-          </p>
-        </div>
-        <div class="guide-card">
-          <h4>3. Tích Sao Đổi Giờ Xem YouTube & Game</h4>
-          <p>
-            • Mặc định <b>Chế độ Chỉ Học Tập</b> được bật để bé tập trung học.<br>
-            • Khi tích đủ <b>3 ★</b>, bé có thể bấm vào icon <b>▶️ YouTube</b> hoặc <b>🎮 Game</b> để đổi lấy 10 phút giải trí. Hết giờ, Robot tự động quay về màn hình học.
-          </p>
-        </div>
-        <div class="guide-card">
-          <h4>4. Đánh Thức & Bảo Vệ Pin Khi Cắm Sạc</h4>
-          <p>
-            • Sau 60 giây không thao tác, màn hình chuyển sang nền đen OLED tiết kiệm pin. Chạm màn hình hoặc nói <b>"Hello Lucky"</b> để đánh thức.<br>
-            • Khi kết nối mạch <b>ESP32 BLE</b>, Robot tự động ngắt sạc ở 90% và sạc lại ở 50% giúp máy mát và không phồng pin khi cắm điện 24/24.
-          </p>
-        </div>
+    <!-- TAB 6: HƯỚNG DẪN SỬ DỤNG -->
+    <section class="tab-pane" id="tab-guide">
+      <div class="set-card" style="max-width:860px; margin:0 auto;">
+        <h2>❗ Hướng Dẫn Sử Dụng Robot 2027 Pro</h2>
+        <p style="font-size:13px; color:#cbd5e1; line-height:1.6;">
+          • <b>Kiếm sao (★):</b> Bé vào mục <b>📖 Sổ học</b> chọn 1 trong 32 chủ đề, bấm <b>🔊 Nghe mẫu</b> rồi bấm <b>🎙️ Bé đọc</b>. Đọc đạt từ 80% trở lên sẽ được cộng ngay <b>+1 ★</b> và đồng bộ tự động với khu vực YouTube & Trò chơi.<br>
+          • <b>Xem YouTube & Chơi Game:</b> Khi mở tab <b>▶️</b> hoặc <b>🎮</b>, góc trái thanh công cụ trên cùng sẽ xuất hiện nút <b>🔄</b> để tải lại trang bất cứ lúc nào. Điểm sao tăng/giảm trong game hoặc video sẽ tự động cập nhật về App sau mỗi 2 giây.<br>
+          • <b>Ghim chống thoát App:</b> Bật tính năng <i>Ghim ứng dụng (Pin windows)</i> trong Cài đặt Bảo mật của điện thoại Android, sau đó bấm <b>📌 Ghim</b> trong tab Cài đặt của App.<br>
+          • <b>Quản trị nội dung từ xa:</b> Truy cập <code>youtube.php?action=studio</code> hoặc <code>games.php?action=studio</code> trên trình duyệt (Mật khẩu mặc định: <code>202799</code>).
+        </p>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Sub-panel Cấp 2 (92% Diện tích màn hình + Nút X lớn góc phải) -->
-  <div id="subPanelBackdrop" class="subpanel-backdrop">
-    <div class="subpanel-92">
-      <div class="subpanel-head">
-        <div class="panel-title" id="subPanelTitle">Chi tiết</div>
-        <button class="subpanel-close" onclick="AppController.closeSubPanel()">✕</button>
-      </div>
-      <div class="subpanel-content" id="subPanelContent"></div>
-    </div>
-  </div>
+  </main>
 
-  <!-- Modal Nhập Mã PIN 4 Số Phụ Huynh -->
-  <div id="pinModal" class="modal-backdrop">
+  <!-- MODAL NHẬP PIN PHỤ HUYNH -->
+  <div class="modal-backdrop" id="pinModal">
     <div class="modal-box">
-      <h3 id="pinModalTitle">🔒 Nhập Mã PIN Phụ Huynh</h3>
-      <p id="pinModalDesc">Nhập mã PIN 4 số (mặc định 1234).</p>
-      <input type="password" inputmode="numeric" maxlength="4" id="pinInputField" class="pin-input" placeholder="••••" onkeypress="if(event.key==='Enter') AppController.verifyParentPin()" />
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button class="btn-neon gray" onclick="document.getElementById('pinModal').classList.remove('open')">Hủy</button>
-        <button class="btn-neon green" onclick="AppController.verifyParentPin()">Xác nhận</button>
+      <h3>🔐 Nhập Mã PIN Phụ Huynh</h3>
+      <input type="password" inputmode="numeric" maxlength="4" id="pinInput" class="modal-input" placeholder="Nhập 4 chữ số (Mặc định: 1234)">
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" class="btn" onclick="closeModal('pinModal')">Hủy</button>
+        <button type="button" class="btn btn-primary" onclick="verifyPin()">Mở khóa</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal Đổi Sao Mở Khóa YouTube / Game -->
-  <div id="rewardUnlockModal" class="modal-backdrop">
+  <!-- MODAL CẤU HÌNH SERVER BASE URL -->
+  <div class="modal-backdrop" id="apiModal">
     <div class="modal-box">
-      <h3 id="rewardModalTitle">🔒 Đang trong giờ học tập</h3>
-      <p id="rewardModalDesc"></p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-        <button class="btn-neon gray" onclick="document.getElementById('rewardUnlockModal').classList.remove('open')">Quay lại học</button>
-        <button class="btn-neon amber" onclick="AppController.openParentPinFromReward()">🔑 PIN Bố/Mẹ</button>
-        <button class="btn-neon green" id="btnRedeemStars" onclick="AppController.redeemStarsForPlay()">⭐ Đổi 3 ★ lấy 10 phút</button>
+      <h3>🌐 Cấu Hình Thư Mục Backend</h3>
+      <p style="font-size:12px; color:#94a3b8;">Nhập đường dẫn gốc chứa api.php, api_point.php, youtube.php, games.php:</p>
+      <input type="text" id="apiBaseUrlInput" class="modal-input" placeholder="https://khotrithucso.io.vn/robot2027_2_4/test1">
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" class="btn" onclick="closeModal('apiModal')">Đóng</button>
+        <button type="button" class="btn btn-primary" onclick="saveApiBaseUrl()">Lưu cấu hình</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal Xử Lý Thông Minh Khi Đọc Sai > 3 Lần -->
-  <div id="retryChoiceModal" class="modal-backdrop">
+  <!-- MODAL KẾT NỐI ESP32 BLE -->
+  <div class="modal-backdrop" id="espModal">
     <div class="modal-box">
-      <h3>🤗 Câu này hơi khó một chút!</h3>
-      <p>Bạn đã thử đọc hơn 3 lần rồi. Bạn muốn <b>học lại câu này từ đầu</b> (đọc chậm & đánh vần) hay <b>chuyển sang câu khác</b>?</p>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button class="btn-neon green" onclick="FaceLessonEngine.chooseRestartSentence()">🔁 Học lại từ đầu</button>
-        <button class="btn-neon amber" onclick="FaceLessonEngine.chooseNextSentenceFromModal()">⏭️ Qua câu khác</button>
+      <h3>🔌 Kết Nối Mạch ESP32 (Bluetooth BLE)</h3>
+      <p id="espStatusText" style="font-size:13px; color:#cbd5e1;">Chưa kết nối thiết bị ngoại vi.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary" onclick="connectEsp32Ble()">🔍 Quét & Kết nối ESP32</button>
+        <button type="button" class="btn" onclick="closeModal('espModal')">Đóng</button>
       </div>
     </div>
   </div>
 
-  <div id="toastBanner" class="toast-banner"></div>
-
-  <script src="js/config.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/hardware_bridge.js"></script>
-  <script src="js/face_lesson_engine.js"></script>
-  <script src="js/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
